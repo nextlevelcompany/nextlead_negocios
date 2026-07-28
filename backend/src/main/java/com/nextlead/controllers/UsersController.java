@@ -52,6 +52,9 @@ public class UsersController {
         if (newUser.getRole() == null || newUser.getRole().trim().isEmpty()) {
             newUser.setRole("USER");
         }
+        if (newUser.getModules() == null) {
+            newUser.setModules("");
+        }
         
         // Guardar en base de datos
         userDao.save(newUser);
@@ -88,6 +91,9 @@ public class UsersController {
         
         if (updatedUser.getAvatar() != null) {
             existingUser.setAvatar(updatedUser.getAvatar());
+        }
+        if (updatedUser.getModules() != null) {
+            existingUser.setModules(updatedUser.getModules());
         }
 
         userDao.update(existingUser);

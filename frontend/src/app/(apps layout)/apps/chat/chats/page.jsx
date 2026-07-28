@@ -36,7 +36,7 @@ const Chats = () => {
                                         <p className="text-secondary mb-0" style={{ fontSize: '13px' }}>
                                             Abre una nueva pestaña en tu navegador Google Chrome y escribe la dirección: 
                                             <code className="bg-light px-2 py-1 rounded ms-1 text-danger fw-semibold" style={{ fontSize: '12px' }}>chrome://extensions</code>. 
-                                            Una vez allí, activa el interruptor de <strong>"Modo de desarrollador"</strong> en la esquina superior derecha.
+                                            Una vez allí, activa el interruptor de <strong>&quot;Modo de desarrollador&quot;</strong> en la esquina superior derecha.
                                         </p>
                                     </div>
                                 </div>
@@ -46,7 +46,7 @@ const Chats = () => {
                                     <div>
                                         <h6 className="fw-semibold mb-1 text-dark">Carga la Extensión en el Navegador</h6>
                                         <p className="text-secondary mb-0" style={{ fontSize: '13px' }}>
-                                            Haz clic en el botón <strong>"Cargar descomprimida"</strong> (esquina superior izquierda) y selecciona la carpeta del proyecto ubicada en tu PC: 
+                                            Haz clic en el botón <strong>&quot;Cargar descomprimida&quot;</strong> (esquina superior izquierda) y selecciona la carpeta del proyecto ubicada en tu PC: 
                                             <br />
                                             <code className="bg-light d-inline-block px-2 py-1 rounded mt-1 text-dark text-break" style={{ fontSize: '11px' }}>C:\Proyectos\CRM_WHATAPP\nextlead\chrome-extension</code>
                                         </p>

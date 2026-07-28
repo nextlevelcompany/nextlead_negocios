@@ -33,7 +33,7 @@ public class AuthController {
             User user = userOpt.get();
             if (passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
                 String token = jwtUtils.generateToken(user.getUsername(), user.getRole());
-                return ResponseEntity.ok(new LoginResponse(token, user.getUsername(), user.getRole()));
+                return ResponseEntity.ok(new LoginResponse(token, user.getUsername(), user.getRole(), user.getModules()));
             }
         }
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario o contraseña incorrectos");
@@ -102,11 +102,13 @@ public class AuthController {
         private String token;
         private String username;
         private String role;
+        private String modules;
 
-        public LoginResponse(String token, String username, String role) {
+        public LoginResponse(String token, String username, String role, String modules) {
             this.token = token;
             this.username = username;
             this.role = role;
+            this.modules = modules;
         }
 
         public String getToken() {
@@ -131,6 +133,14 @@ public class AuthController {
 
         public void setRole(String role) {
             this.role = role;
+        }
+
+        public String getModules() {
+            return modules;
+        }
+
+        public void setModules(String modules) {
+            this.modules = modules;
         }
     }
 

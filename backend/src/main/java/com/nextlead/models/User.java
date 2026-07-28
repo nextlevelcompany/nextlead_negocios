@@ -12,6 +12,7 @@ public class User {
     private String phone;
     private String website;
     private String avatar;
+    private String modules;
 
     public User() {}
 
@@ -108,5 +109,13 @@ public class User {
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
+    }
+
+    public String getModules() {
+        return modules;
+    }
+
+    public void setModules(String modules) {
+        this.modules = modules;
     }
 }

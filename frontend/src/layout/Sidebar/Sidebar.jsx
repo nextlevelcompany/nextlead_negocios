@@ -17,6 +17,22 @@ const Sidebar = () => {
     const pathname = usePathname();
     const { theme } = useTheme();
 
+    const [userModules, setUserModules] = useState('');
+    const [userRole, setUserRole] = useState('');
+
+    useEffect(() => {
+        const updatePermissions = () => {
+            setUserModules(localStorage.getItem('modules') || '');
+            setUserRole(localStorage.getItem('role') || '');
+        };
+        
+        updatePermissions();
+        window.addEventListener('storage', updatePermissions);
+        return () => {
+            window.removeEventListener('storage', updatePermissions);
+        };
+    }, []);
+
     useEffect(() => {
         require("bootstrap/js/dist/collapse");
     }, []);
@@ -32,6 +48,51 @@ const Sidebar = () => {
         setActiveMenu(menuName);
     }
 
+    const matchesModule = (menu, moduleName) => {
+        if (!menu) return false;
+        const path = menu.path || '';
+        const id = menu.id || '';
+        
+        switch (moduleName) {
+            case 'dashboard':
+                return path.startsWith('/dashboard');
+            case 'chat':
+                return path.startsWith('/apps/chat');
+            case 'contactos':
+                return id === 'menu_contactos' || path.startsWith('/apps/contact');
+            case 'oportunidades':
+                return id === 'menu_oportunidades' || path.startsWith('/opportunities');
+            case 'pedidos':
+                return id === 'menu_pedidos' || path.startsWith('/pedidos');
+            case 'ventas':
+                return id === 'menu_ventas' || path.startsWith('/ventas');
+            case 'productos':
+                return id === 'menu_productos' || path.startsWith('/productos');
+            case 'inventarios':
+                return id === 'menu_inventarios' || path.startsWith('/inventarios');
+            case 'finanzas':
+                return id === 'menu_finanzas' || path.startsWith('/finanzas');
+            case 'personal':
+                return id === 'menu_personal' || path.startsWith('/payroll');
+            case 'admin':
+                return id === 'menu_admin' || path.startsWith('/admin');
+            default:
+                return false;
+        }
+    };
+
+    const isModuleAllowed = (menu) => {
+        if (userRole === 'ADMIN') return true;
+        if (!userModules) {
+            if (userRole === 'USER') {
+                const defaultUserModules = ['dashboard', 'chat', 'contactos'];
+                return defaultUserModules.some(m => matchesModule(menu, m));
+            }
+            return true;
+        }
+        const allowedModules = userModules.split(',').map(m => m.trim().toLowerCase());
+        return allowedModules.some(m => matchesModule(menu, m));
+    };
 
     return (
         <>
@@ -41,13 +102,17 @@ const Sidebar = () => {
                 {/* Main Menu */}
                 <SimpleBar className="nicescroll-bar">
                     <div className="menu-content-wrap">
-                        {SidebarMenu.map((routes, index) => (
+                        {SidebarMenu.map((routes, index) => {
+                            const allowedContents = routes.contents.filter(isModuleAllowed);
+                            if (allowedContents.length === 0) return null;
+                            
+                            return (
                             <React.Fragment key={index}>
                                 <div className="menu-group" >
                                     {routes.group && <div className="nav-header" >
                                         <span>{routes.group}</span>
                                     </div>}
-                                    {routes.contents.map((menus, idx) => (
+                                    {allowedContents.map((menus, idx) => (
                                         <Nav bsPrefix="navbar-nav" className="flex-column" key={idx}>
                                             <Nav.Item className={classNames({ "active": pathname.startsWith(menus.path) })}>
                                                 {
@@ -147,7 +212,8 @@ const Sidebar = () => {
                                 </div>
                                 <div className="menu-gap" />
                             </React.Fragment>
-                        ))}
+                            );
+                        })}
                     </div>
                 </SimpleBar>
                 {/* /Main Menu */}

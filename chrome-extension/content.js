@@ -139,6 +139,11 @@ function initExtension() {
         <button id="nl-save-lead-btn" class="nl-btn">
           <span>Guardar en CRM</span>
         </button>
+
+        <button id="nl-sync-metrics-btn" class="nl-btn nl-btn-secondary" style="margin-top: 10px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          <span>Sincronizar Métricas</span>
+        </button>
       </div>
 
       <!-- PANE 2: Canned Replies -->
@@ -189,6 +194,9 @@ function initExtension() {
   // Save/Sync Lead Button Click
   document.getElementById('nl-save-lead-btn').addEventListener('click', saveLeadToCRM);
 
+  // Sync Metrics Button Click
+  document.getElementById('nl-sync-metrics-btn').addEventListener('click', syncMetrics);
+
   // Manual Pull Data Button Click
   document.getElementById('nl-pull-data-btn').addEventListener('click', () => {
     checkActiveChat(true);
@@ -238,6 +246,43 @@ function startChatObserver() {
   });
 }
 
+// Función auxiliar para buscar un JID en los atributos de un elemento y sus hijos
+function findJidInElementAttributes(element) {
+  if (!element) return null;
+  
+  // 1. Buscar en el propio elemento
+  if (element.attributes) {
+    for (let i = 0; i < element.attributes.length; i++) {
+      const attr = element.attributes[i];
+      const val = attr.value || '';
+      // Regex ultra-permisiva para detectar cualquier JID de usuario individual de WhatsApp
+      const match = val.match(/(\d+)@(?:c\.us|s\.whatsapp\.net)/);
+      if (match && match[1]) {
+        console.log('[NextLead] JID encontrado en atributo:', attr.name, '=', val);
+        return match[1];
+      }
+    }
+  }
+
+  // 2. Buscar en todos sus descendientes
+  const allChildren = element.getElementsByTagName('*');
+  for (const child of allChildren) {
+    if (child.attributes) {
+      for (let i = 0; i < child.attributes.length; i++) {
+        const attr = child.attributes[i];
+        const val = attr.value || '';
+        const match = val.match(/(\d+)@(?:c\.us|s\.whatsapp\.net)/);
+        if (match && match[1]) {
+          console.log('[NextLead] JID encontrado en descendiente:', child.tagName, '->', attr.name, '=', val);
+          return match[1];
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 // Scrape active phone number and contact name from WhatsApp Web DOM
 function checkActiveChat(force = false) {
   console.log('[NextLead] Ejecutando checkActiveChat...');
@@ -279,62 +324,40 @@ function checkActiveChat(force = false) {
   let foundPhone = null;
   let contactName = '';
 
-  // Método 1: Leer el JID/Teléfono desde los data-id de las burbujas de mensaje (Global, libre de #main)
-  const messageEls = document.querySelectorAll('div[data-id]');
-  console.log('[NextLead] Burbujas de mensaje con data-id encontradas:', messageEls.length);
-  for (const el of messageEls) {
-    const dataId = el.getAttribute('data-id') || '';
-    const match = dataId.match(/^(?:true|false)_(\d{9,15})@c\.us_/);
-    if (match && match[1]) {
-      foundPhone = match[1];
-      console.log('[NextLead] Teléfono extraído de data-id de mensaje:', foundPhone);
-      break;
-    }
-  }
+  // 1. EXTRAER EL NOMBRE DEL CONTACTO (Con lógica semántica robusta contra estados e info del sistema)
+  const blacklist = [
+    'últ. vez', 'en línea', 'escribiendo', 'online', 'typing', 
+    'buscar', 'menú', 'llamada', 'videollamada', 'click', 'info del', 
+    'mensajes temporales', 'touch here', 'últ. vez hoy', 'últ. vez ayer',
+    'click here for', 'clic aquí', 'info. del'
+  ];
 
-  // Método 2: Leer de la URL de la imagen del avatar del header
-  if (!foundPhone) {
-    const avatarImg = mainHeader.querySelector('img');
-    if (avatarImg && avatarImg.src) {
-      console.log('[NextLead] URL del avatar del header:', avatarImg.src);
-      try {
-        const srcUrl = new URL(avatarImg.src);
-        const uParam = srcUrl.searchParams.get('u');
-        if (uParam) {
-          foundPhone = uParam.split('@')[0].replace(/\D/g, '');
-          console.log('[NextLead] Teléfono extraído de parámetro u del avatar:', foundPhone);
-        }
-      } catch (e) {
-        console.log('[NextLead] Error al parsear URL de avatar:', e);
+  const clickableHeader = mainHeader.querySelector('div[role="button"]');
+  const nameSearchContainer = clickableHeader || mainHeader;
+  const spans = nameSearchContainer.querySelectorAll('span');
+
+  for (const span of spans) {
+    const title = (span.getAttribute('title') || '').trim();
+    const text = (span.innerText || '').trim();
+
+    if (title && title.length > 0 && title.length < 100) {
+      const isBlack = blacklist.some(word => title.toLowerCase().includes(word));
+      if (!isBlack) {
+        contactName = title;
+        break;
       }
     }
-  }
 
-  // Extraer el nombre del contacto de forma precisa, evitando los botones de acción del menú (Buscar, Menú, etc.)
-  const clickableHeader = mainHeader.querySelector('div[role="button"]');
-  if (clickableHeader) {
-    const span = clickableHeader.querySelector('span[title]') || 
-                 clickableHeader.querySelector('span[dir="auto"]') || 
-                 clickableHeader.querySelector('span');
-    if (span) {
-      contactName = (span.getAttribute('title') || span.innerText || '').trim();
-    }
-  }
-
-  // Fallback si no se encontró por el contenedor clickable
-  if (!contactName) {
-    const spansWithTitle = mainHeader.querySelectorAll('span[title]');
-    for (const span of spansWithTitle) {
-      const title = (span.getAttribute('title') || '').trim();
-      // Ignorar títulos comunes de botones de acción
-      if (title && title !== 'Buscar...' && title !== 'Menú' && title !== 'Llamada de voz' && title !== 'Videollamada') {
-        contactName = title;
+    if (text && text.length > 0 && text.length < 100) {
+      const isBlack = blacklist.some(word => text.toLowerCase().includes(word));
+      if (!isBlack) {
+        contactName = text;
         break;
       }
     }
   }
 
-  // Fallback final: texto de primer span razonable
+  // Fallbacks tradicionales de nombres si la búsqueda semántica falla
   if (!contactName) {
     const firstSpan = mainHeader.querySelector('span');
     if (firstSpan) {
@@ -344,22 +367,61 @@ function checkActiveChat(force = false) {
 
   console.log('[NextLead] Nombre del contacto extraído:', contactName);
 
-  // Método 3: Si el nombre de perfil es directamente el número de teléfono
+  // 2. EXTRAER EL TELÉFONO DEL CONTACTO
+  // Método A: Buscar JID en los atributos de la fila seleccionada (aria-selected="true") de la lista de la izquierda
+  const activeRow = document.querySelector('[aria-selected="true"]') || 
+                    document.querySelector('div[data-testid="list-item"][aria-selected="true"]') ||
+                    document.querySelector('.x1c4vz4f.x2lah0s') ||
+                    document.querySelector('div[role="row"] div[aria-selected="true"]');
+  
+  console.log('[NextLead] Fila de chat activa encontrada en el DOM:', !!activeRow);
+  if (activeRow) {
+    // Diagnóstico en consola para ver los atributos reales de la fila seleccionada
+    if (activeRow.attributes) {
+      for (let i = 0; i < activeRow.attributes.length; i++) {
+        console.log(`[NextLead] Atributo fila activa: ${activeRow.attributes[i].name} = ${activeRow.attributes[i].value}`);
+      }
+    }
+    foundPhone = findJidInElementAttributes(activeRow);
+  }
+
+  // Método B: Buscar JID en los atributos del panel de conversación principal (#main)
+  if (!foundPhone && mainPane) {
+    console.log('[NextLead] Buscando JID en los atributos de #main...');
+    foundPhone = findJidInElementAttributes(mainPane);
+  }
+
+  // Método C: Buscar JID en todas las burbujas de mensaje con data-id en el DOM
+  if (!foundPhone) {
+    const messageEls = document.querySelectorAll('[data-id]');
+    console.log(`[NextLead] Buscando en ${messageEls.length} elementos con data-id...`);
+    for (const el of messageEls) {
+      const dataId = el.getAttribute('data-id') || '';
+      const match = dataId.match(/(\d+)@(?:c\.us|s\.whatsapp\.net)/);
+      if (match && match[1]) {
+        foundPhone = match[1];
+        console.log('[NextLead] Teléfono extraído de data-id de burbuja:', foundPhone);
+        break;
+      }
+    }
+  }
+
+  // Método D: Si el nombre es directamente un número telefónico
   if (!foundPhone && contactName) {
     const cleanTitle = contactName.replace(/\D/g, '');
     if (cleanTitle.length >= 9 && (cleanTitle.startsWith('51') || cleanTitle.length === 9)) {
       foundPhone = cleanTitle;
-      console.log('[NextLead] Teléfono extraído por coincidencia numérica del nombre:', foundPhone);
+      console.log('[NextLead] Teléfono extraído por coincidencia del nombre:', foundPhone);
     }
   }
 
-  // Normalizar el teléfono al formato del CRM (código de país 51 por defecto para Perú)
+  // Normalizar el teléfono al formato del CRM (prefijo de Perú 51 por defecto)
   if (foundPhone) {
     foundPhone = foundPhone.replace(/\D/g, '');
     if (foundPhone.length === 9) {
       foundPhone = '51' + foundPhone;
     }
-    console.log('[NextLead] Teléfono normalizado para CRM:', foundPhone);
+    console.log('[NextLead] Teléfono normalizado final:', foundPhone);
   }
 
   if (foundPhone) {
@@ -370,18 +432,18 @@ function checkActiveChat(force = false) {
       document.getElementById('nl-lead-name').value = activeContactName;
       document.getElementById('nl-lead-phone').setAttribute('readonly', 'true');
       
-      // Load current contact info from CRM database
+      // Cargar datos desde el CRM
       loadContactFromCRM(activePhone);
     }
   } else {
-    console.log('[NextLead] No se pudo auto-detectar el teléfono de WhatsApp Web.');
-    // Fallback amigable: Rellenamos el nombre si existe y permitimos ingresar el teléfono manualmente
+    console.log('[NextLead] No se pudo auto-detectar el teléfono.');
     if (contactName) {
+      // Si tenemos el nombre pero no el número, dejamos ingresar el número manualmente
       document.getElementById('nl-lead-name').value = contactName;
       document.getElementById('nl-lead-phone').removeAttribute('readonly');
       document.getElementById('nl-lead-phone').value = '';
       document.getElementById('nl-lead-phone').placeholder = 'Ingresa número de 9 dígitos';
-      showToast('Nombre capturado. Por favor ingresa el número telefónico manualmente.');
+      showToast('Nombre capturado. Ingresa el número telefónico manualmente.');
     }
   }
 }
@@ -493,6 +555,46 @@ async function saveLeadToCRM() {
     } else {
       const errText = await res.text();
       showToast(`Error al guardar: ${errText || res.statusText}`);
+    }
+  } catch (err) {
+    showToast('Error de red al conectar con el CRM API (8081).');
+  }
+}
+
+// Sync Chat Metrics (message count) to CRM backend
+async function syncMetrics() {
+  if (!activePhone) {
+    showToast('Abre un chat para sincronizar métricas.');
+    return;
+  }
+
+  // Cuenta los mensajes en el DOM de WhatsApp Web
+  const messageElements = document.querySelectorAll('div.message-in, div.message-out') || [];
+  const totalCount = messageElements.length;
+
+  const payload = {
+    phone: activePhone,
+    text: `Sincronización de métricas: Se contaron ${totalCount} mensajes en la conversación activa.`,
+    direction: 'outgoing',
+    wamid: `metrics_${activePhone}_${Date.now()}`,
+    timestamp: String(Math.floor(Date.now() / 1000)),
+    ourNumber: 'SYSTEM'
+  };
+
+  try {
+    const res = await apiCall(`${API_BASE}/api/messages/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.status === 200 || res.status === 201) {
+      showToast(`¡Métricas sincronizadas! (${totalCount} mensajes detectados)`);
+    } else {
+      const errText = await res.text();
+      showToast(`Error al sincronizar: ${errText || res.statusText}`);
     }
   } catch (err) {
     showToast('Error de red al conectar con el CRM API (8081).');

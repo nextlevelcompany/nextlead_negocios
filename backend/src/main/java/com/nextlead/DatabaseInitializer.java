@@ -32,12 +32,21 @@ public class DatabaseInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
+        // Asegurar que la columna 'modules' exista en la tabla 'users'
+        try {
+            jdbcTemplate.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS modules TEXT DEFAULT ''");
+            System.out.println(">>> Columna 'modules' en la tabla 'users' verificada/creada.");
+        } catch (Exception e) {
+            System.err.println(">>> Error al verificar/crear la columna 'modules': " + e.getMessage());
+        }
+
         // ── Usuario administrador ───────────────────────────────────────────
         if (!userDao.existsByUsername("admin")) {
             User admin = new User();
             admin.setUsername("admin");
             admin.setPassword(passwordEncoder.encode("admin123"));
             admin.setRole("ADMIN");
+            admin.setModules("dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin");
             userDao.save(admin);
             System.out.println(">>> Usuario administrador por defecto ('admin' / 'admin123') creado.");
         }

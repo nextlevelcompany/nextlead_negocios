@@ -43,6 +43,7 @@ const Login = () => {
                 localStorage.setItem("token", data.token);
                 localStorage.setItem("username", data.username);
                 localStorage.setItem("role", data.role);
+                localStorage.setItem("modules", data.modules || "");
                 router.push("/");
             } else {
                 try {
