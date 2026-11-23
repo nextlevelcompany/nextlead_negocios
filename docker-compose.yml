@@ -38,7 +38,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       TZ: ${TZ:-America/Lima}
     ports:
-      - "8081:8080"
+      - "${BACKEND_PORT:-8081}:8080"
     volumes:
       - nextlead_uploads:/app/uploads
       - nextlead_backend_logs:/app/logs
@@ -57,7 +57,7 @@ services:
     container_name: nextlead_frontend
     restart: always
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3001}:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8081}
       - BACKEND_INTERNAL_URL=http://backend:8080
