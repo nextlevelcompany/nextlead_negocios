@@ -187,24 +187,32 @@ public class DashboardController {
             // 6. Opciones para el selector de filtro (Supervisores y Ejecutivos)
             Map<String, Object> filterOptions = new HashMap<>();
 
-            List<Map<String, Object>> supervisores = jdbcTemplate.queryForList(
-                "SELECT t.id, TRIM(CONCAT(t.nombre, ' ', t.apellido)) as nombre, t.equipo, " +
-                "       (SELECT COUNT(*) FROM trabajadores sub WHERE sub.supervisor_id = t.id) as miembros_a_cargo " +
-                "FROM trabajadores t " +
-                "WHERE (LOWER(t.rol_operativo) LIKE '%supervisor%' OR t.id IN (SELECT DISTINCT supervisor_id FROM trabajadores WHERE supervisor_id IS NOT NULL)) " +
-                "ORDER BY t.nombre ASC"
-            );
-            filterOptions.put("supervisores", supervisores);
+            try {
+                List<Map<String, Object>> supervisores = jdbcTemplate.queryForList(
+                    "SELECT t.id, TRIM(CONCAT(t.nombre, ' ', t.apellido)) as nombre, t.equipo, " +
+                    "       (SELECT COUNT(*) FROM trabajadores sub WHERE sub.supervisor_id = t.id) as miembros_a_cargo " +
+                    "FROM trabajadores t " +
+                    "WHERE (LOWER(t.rol_operativo) LIKE '%supervisor%' OR t.id IN (SELECT DISTINCT supervisor_id FROM trabajadores WHERE supervisor_id IS NOT NULL)) " +
+                    "ORDER BY t.nombre ASC"
+                );
+                filterOptions.put("supervisores", supervisores);
+            } catch (Exception e) {
+                filterOptions.put("supervisores", Collections.emptyList());
+            }
 
-            List<Map<String, Object>> ejecutivos = jdbcTemplate.queryForList(
-                "SELECT t.id, t.usuario_id, TRIM(CONCAT(t.nombre, ' ', t.apellido)) as nombre, " +
-                "       t.rol_operativo as cargo, t.equipo, t.supervisor_id, " +
-                "       TRIM(CONCAT(sup.nombre, ' ', sup.apellido)) as supervisor_nombre " +
-                "FROM trabajadores t " +
-                "LEFT JOIN trabajadores sup ON t.supervisor_id = sup.id " +
-                "ORDER BY t.nombre ASC"
-            );
-            filterOptions.put("ejecutivos", ejecutivos);
+            try {
+                List<Map<String, Object>> ejecutivos = jdbcTemplate.queryForList(
+                    "SELECT t.id, t.usuario_id, TRIM(CONCAT(t.nombre, ' ', t.apellido)) as nombre, " +
+                    "       t.rol_operativo as cargo, t.equipo, t.supervisor_id, " +
+                    "       TRIM(CONCAT(sup.nombre, ' ', sup.apellido)) as supervisor_nombre " +
+                    "FROM trabajadores t " +
+                    "LEFT JOIN trabajadores sup ON t.supervisor_id = sup.id " +
+                    "ORDER BY t.nombre ASC"
+                );
+                filterOptions.put("ejecutivos", ejecutivos);
+            } catch (Exception e) {
+                filterOptions.put("ejecutivos", Collections.emptyList());
+            }
 
             data.put("filterOptions", filterOptions);
 

@@ -906,3 +906,24 @@ SELECT setval('rentabilidad_perfiles_id_seq', (SELECT COALESCE(MAX(id), 1) FROM 
 -- Vinculación de Trabajadores con Módulo de Rentabilidad y Comisiones Dealer
 ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS perfil_comision_id INT REFERENCES rentabilidad_perfiles(id) ON DELETE SET NULL;
 ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS gastos_adicionales NUMERIC(12,2) DEFAULT 0.00;
+ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS equipo VARCHAR(100);
+ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS supervisor_id BIGINT REFERENCES trabajadores(id) ON DELETE SET NULL;
+
+-- Asegurar columnas necesarias en Ventas
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS trabajador_id INT REFERENCES trabajadores(id) ON DELETE SET NULL;
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS supervisor_id INT REFERENCES trabajadores(id) ON DELETE SET NULL;
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS equipo VARCHAR(100);
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS estado_instalacion VARCHAR(50) DEFAULT 'pendiente';
+
+-- Asegurar columnas necesarias en Oportunidades
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS tipo_propuesta VARCHAR(50) DEFAULT 'venta';
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS total_instalacion NUMERIC(12,2) DEFAULT 0.00;
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS plazo_acuerdo VARCHAR(100);
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS moneda VARCHAR(20) DEFAULT 'PEN';
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_nombre VARCHAR(150);
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_cargo VARCHAR(100);
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_celular VARCHAR(50);
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_email VARCHAR(100);
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS condiciones_comerciales TEXT;
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS detalles_json TEXT;
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS contacto_persona VARCHAR(150);

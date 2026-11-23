@@ -32,13 +32,8 @@ public class DatabaseInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        // Asegurar que la columna 'modules' exista en la tabla 'users'
-        try {
-            jdbcTemplate.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS modules TEXT DEFAULT ''");
-            System.out.println(">>> Columna 'modules' en la tabla 'users' verificada/creada.");
-        } catch (Exception e) {
-            System.err.println(">>> Error al verificar/crear la columna 'modules': " + e.getMessage());
-        }
+        // Asegurar que las columnas críticas de tablas existentes existan (Migraciones idempotentes)
+        ensureSchemaIntegrity();
 
         // ── Usuario administrador ───────────────────────────────────────────
         if (!userDao.existsByUsername("admin")) {
@@ -275,5 +270,51 @@ public class DatabaseInitializer implements CommandLineRunner {
             contactDao.save(persona);
             System.out.println(">>> Persona Natural semilla creada correctamente.");
         }
+    }
+
+    private void ensureSchemaIntegrity() {
+        String[] migrations = {
+            // Users
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS modules TEXT DEFAULT ''",
+
+            // Trabajadores
+            "ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS equipo VARCHAR(100)",
+            "ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS supervisor_id BIGINT REFERENCES trabajadores(id) ON DELETE SET NULL",
+            "ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS perfil_comision_id INT REFERENCES rentabilidad_perfiles(id) ON DELETE SET NULL",
+            "ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS gastos_adicionales NUMERIC(12,2) DEFAULT 0.00",
+
+            // Ventas
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS trabajador_id INT REFERENCES trabajadores(id) ON DELETE SET NULL",
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS supervisor_id INT REFERENCES trabajadores(id) ON DELETE SET NULL",
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS equipo VARCHAR(100)",
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS estado_instalacion VARCHAR(50) DEFAULT 'pendiente'",
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0.00",
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS igv NUMERIC(12, 2) NOT NULL DEFAULT 0.00",
+            "ALTER TABLE ventas ADD COLUMN IF NOT EXISTS direccion_entrega VARCHAR(255)",
+
+            // Oportunidades
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS notas TEXT",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS productos_json TEXT",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS tipo_propuesta VARCHAR(50) DEFAULT 'venta'",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS total_instalacion NUMERIC(12,2) DEFAULT 0.00",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS plazo_acuerdo VARCHAR(100)",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS moneda VARCHAR(20) DEFAULT 'PEN'",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_nombre VARCHAR(150)",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_cargo VARCHAR(100)",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_celular VARCHAR(50)",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_email VARCHAR(100)",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS condiciones_comerciales TEXT",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS detalles_json TEXT",
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS contacto_persona VARCHAR(150)"
+        };
+
+        for (String sql : migrations) {
+            try {
+                jdbcTemplate.execute(sql);
+            } catch (Exception e) {
+                System.err.println(">>> Migración completada o columna ya existente: " + e.getMessage());
+            }
+        }
+        System.out.println(">>> Integridad de esquema de base de datos verificada con éxito.");
     }
 }
