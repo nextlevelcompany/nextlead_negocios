@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Eye, EyeOff, Lock, User, ShieldCheck, Loader2, AlertCircle, KeyRound, UserCheck } from "lucide-react"
+import { Eye, EyeOff, Lock, User, ShieldCheck, Loader2, AlertCircle } from "lucide-react"
 import api from "@/lib/api"
 import { toast } from "sonner"
 
@@ -22,8 +22,8 @@ export function LoginForm({
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   const router = useRouter()
-  const [username, setUsername] = useState("admin")
-  const [password, setPassword] = useState("admin123")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -36,12 +36,6 @@ export function LoginForm({
       document.cookie = "crm_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
     }
   }, [])
-
-  const handleQuickFill = (user: string, pass: string) => {
-    setUsername(user)
-    setPassword(pass)
-    setErrorMessage(null)
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -210,38 +204,7 @@ export function LoginForm({
               )}
             </Button>
 
-            {/* Accesos rápidos para el equipo */}
-            <div className="pt-3 border-t mt-3">
-              <p className="text-xs text-muted-foreground font-medium mb-2 text-center">
-                Usuarios de Acceso Rápido:
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill("admin", "admin123")}
-                  className="text-xs p-2 rounded border bg-muted/50 hover:bg-muted text-left flex items-center gap-1.5 transition-colors"
-                >
-                  <KeyRound className="size-3 text-primary shrink-0" />
-                  <div>
-                    <div className="font-semibold text-foreground">admin</div>
-                    <div className="text-[10px] text-muted-foreground">Admin General</div>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill("mariana.supervisor", "admin123")}
-                  className="text-xs p-2 rounded border bg-muted/50 hover:bg-muted text-left flex items-center gap-1.5 transition-colors"
-                >
-                  <UserCheck className="size-3 text-emerald-500 shrink-0" />
-                  <div>
-                    <div className="font-semibold text-foreground">mariana</div>
-                    <div className="text-[10px] text-muted-foreground">Supervisor</div>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            <div className="pt-2 text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5 border-t mt-2">
+            <div className="pt-2 text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5 border-t mt-4">
               <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Autenticación encriptada con JWT & BCrypt</span>
             </div>
