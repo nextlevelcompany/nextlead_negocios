@@ -910,10 +910,19 @@ ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS equipo VARCHAR(100);
 ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS supervisor_id BIGINT REFERENCES trabajadores(id) ON DELETE SET NULL;
 
 -- Asegurar columnas necesarias en Ventas
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS oportunidad_id BIGINT REFERENCES oportunidades(id) ON DELETE SET NULL;
 ALTER TABLE ventas ADD COLUMN IF NOT EXISTS trabajador_id INT REFERENCES trabajadores(id) ON DELETE SET NULL;
 ALTER TABLE ventas ADD COLUMN IF NOT EXISTS supervisor_id INT REFERENCES trabajadores(id) ON DELETE SET NULL;
 ALTER TABLE ventas ADD COLUMN IF NOT EXISTS equipo VARCHAR(100);
 ALTER TABLE ventas ADD COLUMN IF NOT EXISTS estado_instalacion VARCHAR(50) DEFAULT 'pendiente';
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS fecha_instalacion TIMESTAMP;
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS documentos_instalacion TEXT;
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS tecnico_instalador VARCHAR(100);
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS notas_instalacion TEXT;
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS estado_aprobacion VARCHAR(50);
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS aprobado_por VARCHAR(100);
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS fecha_aprobacion TIMESTAMP;
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS facturas_seguimiento TEXT;
 
 -- Asegurar columnas necesarias en Oportunidades
 ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS tipo_propuesta VARCHAR(50) DEFAULT 'venta';
