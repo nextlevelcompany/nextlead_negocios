@@ -57,7 +57,7 @@ services:
     container_name: nextlead_frontend
     restart: always
     ports:
-      - "${FRONTEND_PORT:-3001}:3000"
+      - "${FRONTEND_PORT:-3080}:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8081}
       - BACKEND_INTERNAL_URL=http://backend:8080
