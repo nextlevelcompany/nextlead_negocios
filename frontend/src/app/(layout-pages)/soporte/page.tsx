@@ -337,7 +337,7 @@ export default function SoportePage() {
                   <span className="font-medium">Base de Datos PostgreSQL</span>
                 </div>
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                  <CheckCircle2 className="size-3" /> Conectado (Puerto 5433)
+                  <CheckCircle2 className="size-3" /> Conectado (PostgreSQL)
                 </span>
               </div>
 
