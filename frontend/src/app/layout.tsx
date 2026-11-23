@@ -1,14 +1,9 @@
 import "./globals.css"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
 import { ThemeProvider } from "next-themes"
 
 import UIThemeProvider from "@/providers/ui-theme-provider"
 import { Toaster } from "@/components/ui/sonner"
-
-const inter = Inter({
-  subsets: ["latin"],
-})
 
 export const metadata: Metadata = {
   title: "NextLead B2B Soluciones | CRM WhatsApp & Ventas",
@@ -61,7 +56,7 @@ export default function RootLayout({
       lang="en"
       suppressHydrationWarning
     >
-      <body className={inter.className} suppressHydrationWarning>
+      <body className="font-sans antialiased" suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
