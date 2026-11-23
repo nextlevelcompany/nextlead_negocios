@@ -314,7 +314,26 @@ public class DatabaseInitializer implements CommandLineRunner {
             "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_email VARCHAR(100)",
             "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS condiciones_comerciales TEXT",
             "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS detalles_json TEXT",
-            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS contacto_persona VARCHAR(150)"
+            "ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS contacto_persona VARCHAR(150)",
+
+            // Limpieza de URLs con localhost en system_settings y productos
+            "UPDATE system_settings SET value_text = SUBSTRING(value_text FROM POSITION('/uploads/' IN value_text)) WHERE value_text LIKE '%/uploads/%' AND (value_text LIKE 'http://localhost%' OR value_text LIKE 'http://127.0.0.1%')",
+            "UPDATE system_settings SET value_text = SUBSTRING(value_text FROM POSITION('/productos/' IN value_text)) WHERE value_text LIKE '%/productos/%' AND (value_text LIKE 'http://localhost%' OR value_text LIKE 'http://127.0.0.1%')",
+            "UPDATE productos SET imagen = SUBSTRING(imagen FROM POSITION('/uploads/' IN imagen)) WHERE imagen LIKE '%/uploads/%' AND (imagen LIKE 'http://localhost%' OR imagen LIKE 'http://127.0.0.1%')",
+            "UPDATE productos SET imagen = SUBSTRING(imagen FROM POSITION('/productos/' IN imagen)) WHERE imagen LIKE '%/productos/%' AND (imagen LIKE 'http://localhost%' OR imagen LIKE 'http://127.0.0.1%')",
+
+            // Asignación de imágenes oficiales a los planes de ON Negocios
+            "UPDATE productos SET imagen = '/productos/01_plan_200_LITE.png' WHERE codigo = 'PLAN-200-LITE' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/02_plan_300_LITE.png' WHERE codigo = 'PLAN-300-LITE' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/03_plan_300_PLUS.png' WHERE codigo = 'PLAN-300-PLUS' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/04_plan_400_PLUS.png' WHERE codigo = 'PLAN-400-PLUS' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/05_plan_400_PLUS_Router.png' WHERE codigo = 'PLAN-400-PLUS-ROUTER' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/06_plan_600_LITE.png' WHERE codigo = 'PLAN-600-LITE' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/07_plan_600_PLUS.png' WHERE codigo = 'PLAN-600-PLUS' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/08_plan_600_PLUS_Router.png' WHERE codigo = 'PLAN-600-PLUS-ROUTER' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/09_plan_1000_LITE.png' WHERE codigo = 'PLAN-1000-LITE' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/10_plan_300_business.png' WHERE codigo = 'PLAN-300-BUSINESS' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+            "UPDATE productos SET imagen = '/productos/11_plan_400_business_wifi.png' WHERE codigo = 'PLAN-400-BUSINESS-WIFI' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')"
         };
 
         for (String sql : migrations) {

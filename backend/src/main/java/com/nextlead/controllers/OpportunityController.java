@@ -319,7 +319,16 @@ public class OpportunityController {
             );
             Map<String, String> map = new HashMap<>();
             for (Map<String, Object> row : list) {
-                map.put(String.valueOf(row.get("key_name")), String.valueOf(row.get("value_text")));
+                String k = String.valueOf(row.get("key_name"));
+                String v = String.valueOf(row.get("value_text"));
+                if (v != null) {
+                    if (v.contains("/uploads/")) {
+                        v = v.substring(v.indexOf("/uploads/"));
+                    } else if (v.contains("/productos/")) {
+                        v = v.substring(v.indexOf("/productos/"));
+                    }
+                }
+                map.put(k, v);
             }
             return ResponseEntity.ok(map);
         } catch (Exception e) {
@@ -333,7 +342,12 @@ public class OpportunityController {
         try {
             for (Map.Entry<String, String> entry : settings.entrySet()) {
                 String key = entry.getKey();
-                String val = entry.getValue() != null ? entry.getValue() : "";
+                String val = entry.getValue() != null ? entry.getValue().trim() : "";
+                if (val.contains("/uploads/")) {
+                    val = val.substring(val.indexOf("/uploads/"));
+                } else if (val.contains("/productos/")) {
+                    val = val.substring(val.indexOf("/productos/"));
+                }
                 jdbcTemplate.update(
                     "INSERT INTO system_settings (key_name, value_text) VALUES (?, ?) " +
                     "ON CONFLICT (key_name) DO UPDATE SET value_text = EXCLUDED.value_text",

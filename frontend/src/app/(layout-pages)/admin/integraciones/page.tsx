@@ -190,7 +190,7 @@ export default function IntegracionesPage() {
 
   const webhookUrl =
     typeof window !== "undefined"
-      ? `${window.location.protocol}//${window.location.hostname}:8081/api/whatsapp/webhook`
+      ? `${window.location.protocol}//${window.location.host}/api/whatsapp/webhook`
       : "https://tudominio.com/api/whatsapp/webhook";
 
   // Load all configurations

@@ -65,14 +65,31 @@ export default function QuotationConfigPage() {
     "cotizacion.usar_hoja_membrete": "true",
   });
 
+  const cleanMediaUrl = (url?: string) => {
+    if (!url) return "";
+    let clean = url.trim();
+    if (clean.includes("/uploads/")) {
+      clean = clean.substring(clean.indexOf("/uploads/"));
+    } else if (clean.includes("/productos/")) {
+      clean = clean.substring(clean.indexOf("/productos/"));
+    }
+    return clean;
+  };
+
   const loadSettings = async () => {
     setLoading(true);
     try {
       const res = await api.get("/api/opportunities/settings");
       if (res.data) {
+        const cleaned: Record<string, string> = { ...res.data };
+        for (const k of Object.keys(cleaned)) {
+          if (typeof cleaned[k] === "string" && (cleaned[k].includes("/uploads/") || cleaned[k].includes("/productos/"))) {
+            cleaned[k] = cleanMediaUrl(cleaned[k]);
+          }
+        }
         setForm((prev) => ({
           ...prev,
-          ...res.data,
+          ...cleaned,
         }));
       }
     } catch (err: any) {
@@ -154,7 +171,13 @@ export default function QuotationConfigPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post("/api/opportunities/settings", form);
+      const payload: Record<string, string> = { ...form };
+      for (const k of Object.keys(payload)) {
+        if (typeof payload[k] === "string" && (payload[k].includes("/uploads/") || payload[k].includes("/productos/"))) {
+          payload[k] = cleanMediaUrl(payload[k]);
+        }
+      }
+      await api.post("/api/opportunities/settings", payload);
       toast.success("Configuración de cotización guardada con éxito.");
     } catch (err: any) {
       console.error("Error saving settings:", err);
@@ -182,15 +205,16 @@ export default function QuotationConfigPage() {
 
   const getMediaUrl = (url?: string) => {
     if (!url) return "";
-    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
+    const clean = cleanMediaUrl(url);
+    if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("data:")) return clean;
     const base = process.env.NEXT_PUBLIC_API_URL || "";
-    return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+    return `${base}${clean.startsWith("/") ? "" : "/"}${clean}`;
   };
 
   const previewMembreteImg =
-    form["cotizacion.hoja_membrete_imagen_url"] ||
+    cleanMediaUrl(form["cotizacion.hoja_membrete_imagen_url"]) ||
     (["png", "jpg", "jpeg", "webp"].some((ext) => (form["cotizacion.hoja_membrete_url"] || "").toLowerCase().endsWith(ext))
-      ? form["cotizacion.hoja_membrete_url"]
+      ? cleanMediaUrl(form["cotizacion.hoja_membrete_url"])
       : (form["cotizacion.hoja_membrete_url"] ? "/uploads/membrete_a4.png" : ""));
 
   return (
@@ -285,7 +309,7 @@ export default function QuotationConfigPage() {
                           </Badge>
                         </div>
                         <p className="text-[10px] text-muted-foreground truncate">
-                          Ruta en servidor: {membreteUrl}
+                          Ruta en servidor: {cleanMediaUrl(membreteUrl)}
                         </p>
                       </div>
                     </div>

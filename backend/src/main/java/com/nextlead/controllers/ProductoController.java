@@ -233,8 +233,16 @@ public class ProductoController {
         } catch (IllegalArgumentException e) {
             // Si no era base64 válido, tal vez es un nombre de archivo local
             try {
-                String filename = opt.get().getImagen();
+                String filename = opt.get().getImagen().trim();
+                if (filename.contains("/uploads/")) {
+                    filename = filename.substring(filename.indexOf("/uploads/") + 9);
+                } else if (filename.contains("/productos/")) {
+                    filename = filename.substring(filename.indexOf("/productos/") + 11);
+                }
                 java.io.File file = new java.io.File("/app/uploads/" + filename);
+                if (!file.exists()) {
+                    file = new java.io.File("/app/uploads/productos/" + filename);
+                }
                 if (file.exists()) {
                     byte[] fileBytes = java.nio.file.Files.readAllBytes(file.toPath());
                     String contentType = "image/jpeg";

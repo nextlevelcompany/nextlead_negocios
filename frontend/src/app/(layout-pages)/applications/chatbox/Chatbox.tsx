@@ -136,13 +136,23 @@ function parseMessageContent(text: string) {
 
   if (!text) return { images, audios, documents, displayText };
 
+  const sanitizeMedia = (p: string) => {
+    let clean = p.trim();
+    if (clean.includes("/uploads/")) {
+      return clean.substring(clean.indexOf("/uploads/"));
+    }
+    if (clean.includes("/productos/")) {
+      return clean.substring(clean.indexOf("/productos/"));
+    }
+    if (clean.startsWith("http")) return clean;
+    return `${API_BASE}${clean.startsWith("/") ? "" : "/"}${clean}`;
+  };
+
   // Format 1: [IMAGE]/uploads/...
   if (text.startsWith("[IMAGE]")) {
     const raw = text.substring(7).trim();
     raw.split(",").forEach((p) => {
-      let clean = p.trim().replace(":8080/", ":8081/");
-      if (clean.startsWith("http")) images.push(clean);
-      else images.push(`${API_BASE}${clean}`);
+      images.push(sanitizeMedia(p));
     });
     return { images, audios, documents, displayText: "" };
   }
@@ -151,9 +161,7 @@ function parseMessageContent(text: string) {
   if (text.startsWith("[AUDIO]")) {
     const raw = text.substring(7).trim();
     raw.split(",").forEach((p) => {
-      let clean = p.trim().replace(":8080/", ":8081/");
-      if (clean.startsWith("http")) audios.push(clean);
-      else images.push(`${API_BASE}${clean}`);
+      audios.push(sanitizeMedia(p));
     });
     return { images, audios, documents, displayText: "" };
   }
@@ -169,8 +177,7 @@ function parseMessageContent(text: string) {
 
     const urlMatch = after.match(/(?:url=|id=)(https?:\/\/[^\s,]+|\/[^\s,]+)/i);
     if (urlMatch) {
-      let clean = urlMatch[1].trim().replace(":8080/", ":8081/");
-      const fullUrl = clean.startsWith("http") ? clean : `${API_BASE}${clean}`;
+      const fullUrl = sanitizeMedia(urlMatch[1]);
       if (mediaType === "image") images.push(fullUrl);
       else if (mediaType === "audio") audios.push(fullUrl);
       else documents.push(fullUrl);

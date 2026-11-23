@@ -136,7 +136,12 @@ export default function ProductosCatalogPage() {
   // Normalizes image source (base64, URL or local path)
   const getImageSrc = (imagen?: string | null): string | null => {
     if (!imagen) return null;
-    const img = imagen.trim();
+    let img = imagen.trim();
+    if (img.includes("/uploads/")) {
+      img = img.substring(img.indexOf("/uploads/"));
+    } else if (img.includes("/productos/")) {
+      img = img.substring(img.indexOf("/productos/"));
+    }
     if (img.startsWith("data:image") || img.startsWith("http://") || img.startsWith("https://") || img.startsWith("/")) {
       return img;
     }

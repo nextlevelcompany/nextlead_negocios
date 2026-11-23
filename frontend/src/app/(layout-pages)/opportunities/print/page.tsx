@@ -159,18 +159,30 @@ function PrintQuotationContent() {
 
   const quoteCode = `COT-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(opp.id).padStart(4, "0")}`;
 
+  const cleanMediaUrl = (url?: string) => {
+    if (!url) return "";
+    let clean = url.trim();
+    if (clean.includes("/uploads/")) {
+      clean = clean.substring(clean.indexOf("/uploads/"));
+    } else if (clean.includes("/productos/")) {
+      clean = clean.substring(clean.indexOf("/productos/"));
+    }
+    return clean;
+  };
+
   const getMediaUrl = (url?: string) => {
     if (!url) return "";
-    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
+    const clean = cleanMediaUrl(url);
+    if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("data:")) return clean;
     const base = process.env.NEXT_PUBLIC_API_URL || "";
-    return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+    return `${base}${clean.startsWith("/") ? "" : "/"}${clean}`;
   };
 
   // Resolve Hoja Membrete background image URL
   const isMembreteActive = settings["cotizacion.usar_hoja_membrete"] !== "false";
   const mostrarDatosEmpresa = settings["cotizacion.mostrar_datos_empresa"] === "true";
-  const rawMembreteUrl = settings["cotizacion.hoja_membrete_url"] || "";
-  const rawImageUrl = settings["cotizacion.hoja_membrete_imagen_url"] || "";
+  const rawMembreteUrl = cleanMediaUrl(settings["cotizacion.hoja_membrete_url"] || "");
+  const rawImageUrl = cleanMediaUrl(settings["cotizacion.hoja_membrete_imagen_url"] || "");
 
   let resolvedMembreteBg = "";
   if (isMembreteActive) {
