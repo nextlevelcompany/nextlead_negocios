@@ -302,4 +302,27 @@ public class ContactDaoImpl implements ContactDao {
             return Optional.empty();
         }
     }
+
+    @Override
+    public Optional<Contact> findByNumeroDocumento(String numeroDocumento) {
+        if (numeroDocumento == null || numeroDocumento.isBlank()) return Optional.empty();
+        String sql = """
+            SELECT c.*, e.razon_social AS empresa_nombre
+            FROM contacts c
+            LEFT JOIN contacts e ON c.empresa_id = e.id
+            WHERE c.numero_documento = ?
+            LIMIT 1
+            """;
+        try {
+            List<Contact> list = jdbcTemplate.query(sql, contactRowMapper, numeroDocumento.trim());
+            if (list.isEmpty()) {
+                return Optional.empty();
+            }
+            Contact contact = list.get(0);
+            contact.setDirecciones(findAddressesByContactId(contact.getId()));
+            return Optional.of(contact);
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
 }

@@ -1,20 +1,54 @@
-# Dependencies and build outputs
+# ==========================================
+# NextLead CRM & WhatsApp AI - Git Ignore
+# ==========================================
+
+# 1. Dependencias y Builds de Frontend (Next.js & Node)
 node_modules/
-backend/target/
-frontend/.next/
 frontend/node_modules/
+frontend/.next/
+.next/
+out/
+build/
+dist/
+.turbo/
+frontend/.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# IDE files
-.idea/
-.vscode/
-.continue/
-.agents/
+# 2. Builds y Artefactos de Backend (Java / Spring Boot / Maven)
+backend/target/
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+.mvn/wrapper/maven-wrapper.jar
 
-# Logs and temp files
+# 3. Logs y Archivos Temporales
+logs/
+backend/logs/
 *.log
 *.tmp
+*.temp
 
-# Local environment and credentials
+# 4. Archivos Multimedia y Uploads Locales
+uploads/
+/uploads/
+nextlead_uploads/
+*.pdf
+
+# 5. Volúmenes y Bases de Datos Locales
+postgres_data/
+.docker/
+pgadmin/
+nextlead_database_complete.sql
+*.sql.gz
+*.dump
+
+# 6. Variables de Entorno y Secretos Sensibles
 .env
 .env.local
 .env.development.local
@@ -22,15 +56,26 @@ frontend/node_modules/
 .env.production.local
 jwt.secret
 
-# Docker and Databases
-postgres_data/
-.docker/
-pgadmin/
-loki/
-prometheus/
-grafana/
-promtail/
+# 7. IDEs, Editores y Configuración Local
+.idea/
+.vscode/
+.continue/
+.agents/
+.agyignore
+.antigravityignore
+.geminiignore
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# OS files
+# 8. Archivos del Sistema Operativo
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# 9. Carpetas y Archivos Obsoletos
+frontend_legacy/
+Tailwind+Nextjs-Admin/
+chrome-extension/

@@ -564,8 +564,22 @@ public class WhatsAppWebhookController {
                     }
                 }
             } else {
-                // Fallback defensivo: si Gemini no devolvió JSON, se envía como texto normal.
-                replyText = stripLegacyImageTags(aiResponse).trim();
+                // Fallback defensivo: si Gemini no devolvió JSON parseable, NUNCA enviar JSON crudo al cliente
+                String cleaned = aiResponse.trim();
+                if (cleaned.startsWith("{") || cleaned.contains("\"reply_text\"")) {
+                    logger.warn("El fallback recibió un JSON crudo no parseable. Se previene el envío de JSON al cliente: {}", cleaned);
+                    if (cleaned.contains("\"reply_text\"")) {
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"reply_text\"\\s*:\\s*\"([^\"]*)").matcher(cleaned);
+                        if (m.find()) {
+                            cleaned = cleanNewlines(unescapeJson(m.group(1)));
+                        } else {
+                            cleaned = "¡Hola! ¿En qué podemos ayudarte hoy?";
+                        }
+                    } else {
+                        cleaned = "¡Hola! ¿En qué podemos ayudarte hoy?";
+                    }
+                }
+                replyText = cleanNewlines(stripLegacyImageTags(cleaned));
                 sendMedia = false;
                 mediaType = "image";
                 mediaId = null;
@@ -756,14 +770,66 @@ public class WhatsAppWebhookController {
     }
 
     private AiDecisionResponse parseAiDecision(String aiResponse) {
+        if (aiResponse == null || aiResponse.trim().isEmpty()) return null;
         try {
             String json = extractJson(aiResponse);
-            if (json == null || json.trim().isEmpty()) return null;
-            return objectMapper.readValue(json, AiDecisionResponse.class);
+            if (json != null && !json.trim().isEmpty()) {
+                AiDecisionResponse parsed = objectMapper.readValue(json, AiDecisionResponse.class);
+                if (parsed != null && parsed.getReplyText() != null) {
+                    parsed.setReplyText(cleanNewlines(parsed.getReplyText()));
+                }
+                return parsed;
+            }
         } catch (Exception e) {
-            logger.warn("No se pudo parsear la respuesta de Gemini como JSON. Se usará fallback de texto. Respuesta: {}", aiResponse);
-            return null;
+            logger.warn("No se pudo parsear la respuesta de Gemini como JSON estándar: {}. Intentando rescate por Regex.", e.getMessage());
         }
+
+        // Intento de rescate por Regex si el JSON vino cortado o con caracteres raros
+        try {
+            if (aiResponse.contains("\"reply_text\"")) {
+                AiDecisionResponse fallback = new AiDecisionResponse();
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"reply_text\"\\s*:\\s*\"((?:\\\\\"|[^\"])*)\"");
+                java.util.regex.Matcher m = p.matcher(aiResponse);
+                if (m.find()) {
+                    fallback.setReplyText(cleanNewlines(unescapeJson(m.group(1))));
+                } else {
+                    java.util.regex.Pattern pUnclosed = java.util.regex.Pattern.compile("\"reply_text\"\\s*:\\s*\"([^\"]*)");
+                    java.util.regex.Matcher mUnclosed = pUnclosed.matcher(aiResponse);
+                    if (mUnclosed.find()) {
+                        fallback.setReplyText(cleanNewlines(unescapeJson(mUnclosed.group(1))));
+                    }
+                }
+
+                java.util.regex.Pattern pIntent = java.util.regex.Pattern.compile("\"intent\"\\s*:\\s*\"([^\"]+)\"");
+                java.util.regex.Matcher mIntent = pIntent.matcher(aiResponse);
+                if (mIntent.find()) {
+                    fallback.setIntent(mIntent.group(1));
+                }
+
+                if (fallback.getReplyText() != null && !fallback.getReplyText().trim().isEmpty()) {
+                    logger.info("Respuesta de Gemini rescatada exitosamente vía Regex: {}", fallback.getReplyText());
+                    return fallback;
+                }
+            }
+        } catch (Exception ex) {
+            logger.error("Error al rescatar respuesta de IA con regex: {}", ex.getMessage());
+        }
+
+        return null;
+    }
+
+    private String cleanNewlines(String text) {
+        if (text == null) return null;
+        return text.replaceAll("(\r?\n){3,}", "\n\n").trim();
+    }
+
+    private String unescapeJson(String s) {
+        if (s == null) return null;
+        return s.replace("\\n", "\n")
+                .replace("\\r", "\r")
+                .replace("\\t", "\t")
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\");
     }
 
     private String extractJson(String raw) {

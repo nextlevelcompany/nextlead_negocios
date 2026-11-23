@@ -19,10 +19,13 @@ import com.nextlead.wspai.service.GeminiService;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/messages")
@@ -35,18 +38,21 @@ public class WhatsAppMessageController {
     private final SimpMessagingTemplate messagingTemplate;
     private final ContactDao contactDao;
     private final GeminiService geminiService;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Autowired
     public WhatsAppMessageController(WhatsAppMessageDao messageDao, 
                                      WhatsAppApiService apiService, 
                                      SimpMessagingTemplate messagingTemplate,
                                      ContactDao contactDao,
-                                     GeminiService geminiService) {
+                                     GeminiService geminiService,
+                                     org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.messageDao = messageDao;
         this.apiService = apiService;
         this.messagingTemplate = messagingTemplate;
         this.contactDao = contactDao;
         this.geminiService = geminiService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -88,12 +94,13 @@ public class WhatsAppMessageController {
                 mediaType = "video";
             }
             
-            String localPath = textContent.substring(prefixLen); // "/uploads/filename.ext"
-            String filename = localPath.substring(localPath.lastIndexOf("/") + 1);
-            File file = new File("/app/uploads/", filename);
+            try {
+                String localPath = textContent.substring(prefixLen); // "/uploads/filename.ext"
+                String filename = Paths.get(localPath).getFileName().toString();
+                File uploadsDir = new File("/app/uploads/").getCanonicalFile();
+                File file = new File(uploadsDir, filename).getCanonicalFile();
 
-            if (file.exists()) {
-                try {
+                if (file.exists() && file.getPath().startsWith(uploadsDir.getPath())) {
                     byte[] fileBytes = Files.readAllBytes(file.toPath());
                     String mimeType = getMimeType(filename);
                     
@@ -104,11 +111,11 @@ public class WhatsAppMessageController {
                         // 2. Enviar el mensaje multimedia con el ID de Meta
                         wamid = apiService.sendMediaMessage(receiverPhone, mediaId, mediaType, filename);
                     }
-                } catch (Exception e) {
-                    logger.error("Error al leer y subir archivo local a Meta: {}", e.getMessage(), e);
+                } else {
+                    logger.warn("El archivo físico no se encuentra o la ruta es inválida: {}", filename);
                 }
-            } else {
-                logger.warn("El archivo físico no se encuentra en el servidor: {}", file.getAbsolutePath());
+            } catch (Exception e) {
+                logger.error("Error al procesar y subir archivo local a Meta: {}", e.getMessage(), e);
             }
         } else {
             // Mensaje de texto plano estándar
@@ -148,28 +155,57 @@ public class WhatsAppMessageController {
     }
 
     /**
-     * Endpoint para que el frontend suba archivos locales de imagen al servidor CRM.
+     * Endpoint para que el frontend suba archivos locales de imagen o documentos al servidor CRM.
+     * Sanitizado contra Path Traversal y tipos de archivo arbitrarios.
      */
     @PostMapping("/upload")
     public ResponseEntity<Map<String, String>> uploadFile(@RequestParam("file") MultipartFile file) {
         try {
             if (file.isEmpty()) {
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+                return new ResponseEntity<>(Map.of("error", "El archivo está vacío"), HttpStatus.BAD_REQUEST);
             }
 
-            String uploadDir = "/app/uploads/";
-            File dir = new File(uploadDir);
+            String originalName = file.getOriginalFilename();
+            if (originalName == null || originalName.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Nombre de archivo inválido"));
+            }
+
+            String cleanName = Paths.get(originalName).getFileName().toString();
+            String ext = "";
+            int dotIdx = cleanName.lastIndexOf('.');
+            if (dotIdx > 0 && dotIdx < cleanName.length() - 1) {
+                ext = cleanName.substring(dotIdx + 1).toLowerCase();
+            }
+
+            Set<String> allowedExtensions = Set.of(
+                "jpg", "jpeg", "png", "webp", "gif",
+                "pdf", "mp3", "ogg", "mp4", "m4a",
+                "kml", "kmz", "doc", "docx", "xls", "xlsx"
+            );
+
+            if (!allowedExtensions.contains(ext)) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Tipo de archivo no permitido: ." + ext));
+            }
+
+            File dir = new File("/app/uploads/").getCanonicalFile();
             if (!dir.exists()) {
                 dir.mkdirs();
             }
 
-            // Generar un nombre único de archivo
-            String filename = System.currentTimeMillis() + "_" + file.getOriginalFilename().replaceAll("\\s+", "_");
-            File destFile = new File(dir, filename);
+            // Generar un nombre único y seguro de archivo
+            String filename = System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8) + "." + ext;
+            File destFile = new File(dir, filename).getCanonicalFile();
+
+            // Verificar que el destino esté estrictamente dentro de /app/uploads/
+            if (!destFile.getPath().startsWith(dir.getPath())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Ruta de archivo no autorizada"));
+            }
+
             file.transferTo(destFile);
 
             String localPath = "/uploads/" + filename;
-            logger.info("Archivo local subido al servidor: {}", localPath);
+            logger.info("Archivo local subido al servidor de forma segura: {}", localPath);
             return new ResponseEntity<>(Map.of("url", localPath), HttpStatus.OK);
         } catch (Exception e) {
             logger.error("Error al subir archivo local en el backend: {}", e.getMessage(), e);
@@ -329,5 +365,80 @@ public class WhatsAppMessageController {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(json);
+    }
+
+    /**
+     * Obtiene la lista de conversaciones agrupadas por teléfono con el último mensaje y datos del contacto.
+     */
+    @GetMapping("/conversations")
+    public ResponseEntity<List<Map<String, Object>>> getConversations() {
+        String sql = "SELECT c_list.* FROM (" +
+                     "    SELECT DISTINCT ON (chat_phone) " +
+                     "        chat_phone, " +
+                     "        c.id as contact_id, " +
+                     "        COALESCE(c.razon_social, NULLIF(TRIM(CONCAT(c.nombres, ' ', c.apellidos)), ''), chat_phone) as contact_name, " +
+                     "        COALESCE(c.ai_active, false) as ai_active, " +
+                     "        m.id as last_message_id, " +
+                     "        m.message_text as last_message, " +
+                     "        m.timestamp as last_timestamp, " +
+                     "        m.sender, " +
+                     "        m.receiver, " +
+                     "        m.status " +
+                     "    FROM ( " +
+                     "        SELECT id, sender, receiver, message_text, timestamp, status, " +
+                     "               CASE " +
+                     "                 WHEN sender LIKE '51%' AND sender != '51902801168' THEN sender " +
+                     "                 WHEN receiver LIKE '51%' AND receiver != '51902801168' THEN receiver " +
+                     "                 WHEN sender = 'system' THEN receiver " +
+                     "                 ELSE sender " +
+                     "               END as chat_phone " +
+                     "        FROM whatsapp_messages " +
+                     "    ) m " +
+                     "    LEFT JOIN contacts c ON ( " +
+                     "        c.telefono_principal = m.chat_phone OR " +
+                     "        c.telefono_principal = SUBSTRING(m.chat_phone FROM 3) OR " +
+                     "        m.chat_phone LIKE '%' || c.telefono_principal " +
+                     "    ) " +
+                     "    ORDER BY chat_phone, m.timestamp DESC " +
+                     ") c_list " +
+                     "ORDER BY c_list.last_timestamp DESC " +
+                     "LIMIT 150";
+        List<Map<String, Object>> list = jdbcTemplate.queryForList(sql);
+        return ResponseEntity.ok(list);
+    }
+
+    /**
+     * Activa o desactiva la IA de Gemini para un contacto específico.
+     */
+    @PutMapping("/toggle-ai/{phone}")
+    public ResponseEntity<Map<String, Object>> toggleAi(@PathVariable String phone, @RequestBody(required = false) Map<String, Object> body) {
+        String cleanPhone = phone.replaceAll("\\D", "");
+        String last9 = cleanPhone.length() >= 9 ? cleanPhone.substring(cleanPhone.length() - 9) : cleanPhone;
+        
+        Boolean targetState = null;
+        if (body != null && body.containsKey("aiActive")) {
+            targetState = Boolean.valueOf(body.get("aiActive").toString());
+        }
+
+        if (targetState == null) {
+            String checkSql = "SELECT ai_active FROM contacts WHERE telefono_principal = ? OR telefono_principal LIKE ? LIMIT 1";
+            List<Boolean> current = jdbcTemplate.query(checkSql, (rs, rowNum) -> rs.getBoolean("ai_active"), cleanPhone, "%" + last9);
+            boolean isCurrentlyActive = !current.isEmpty() && Boolean.TRUE.equals(current.get(0));
+            targetState = !isCurrentlyActive;
+        }
+
+        int updated = jdbcTemplate.update(
+            "UPDATE contacts SET ai_active = ? WHERE telefono_principal = ? OR telefono_principal LIKE ?",
+            targetState, cleanPhone, "%" + last9
+        );
+
+        if (updated == 0) {
+            jdbcTemplate.update(
+                "INSERT INTO contacts (nombres, telefono_principal, ai_active, fecha_creacion, estado) VALUES (?, ?, ?, NOW(), 'ACTIVO')",
+                cleanPhone, cleanPhone, targetState
+            );
+        }
+
+        return ResponseEntity.ok(Map.of("phone", cleanPhone, "aiActive", targetState, "message", "Estado de IA actualizado exitosamente"));
     }
 }

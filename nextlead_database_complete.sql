@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Insertar usuario admin por defecto (username: admin, password: admin123)
 -- El hash corresponde a 'admin123' usando BCrypt
 INSERT INTO users (username, password, role, modules)
-VALUES ('admin', '$2a$10$3qmN3JiCajG5W2xrAMX1fexcOk59QXICEQd3Drjd.4u1PmUs1pD.6', 'ADMIN', 'dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin')
+VALUES ('admin', '$2a$06$RKnjshpZGEaGkvrYzts.POcOfm3atYZ9eH2ku44hmLy6ryrOC7hPq', 'ADMIN', 'dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin')
 ON CONFLICT (username) DO NOTHING;
 
 -- Asegurar que las columnas del perfil existan

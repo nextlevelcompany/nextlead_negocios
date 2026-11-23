@@ -43,6 +43,41 @@ public class ProductoDaoImpl implements ProductoDao {
         p.setEsPack(rs.getBoolean("es_pack"));
         p.setRequiereRetorno(rs.getBoolean("requiere_retorno"));
         p.setActivo(rs.getBoolean("activo"));
+
+        // Telecom / ON Negocios Attributes
+        try { p.setTipoProducto(rs.getString("tipo_producto")); } catch (Exception ignored) {}
+        try { p.setSubcategoria(rs.getString("subcategoria")); } catch (Exception ignored) {}
+        try {
+            int vel = rs.getInt("velocidad_mbps");
+            p.setVelocidadMbps(rs.wasNull() ? null : vel);
+        } catch (Exception ignored) {}
+        try { p.setEquipamientoIncluido(rs.getString("equipamiento_incluido")); } catch (Exception ignored) {}
+        try { p.setTelefoniaIncluida(rs.getString("telefonia_incluida")); } catch (Exception ignored) {}
+        try {
+            boolean ruc20 = rs.getBoolean("requiere_ruc20");
+            p.setRequiereRuc20(rs.wasNull() ? null : ruc20);
+        } catch (Exception ignored) {}
+        try {
+            boolean hp = rs.getBoolean("permite_hardphone");
+            p.setPermiteHardphone(rs.wasNull() ? null : hp);
+        } catch (Exception ignored) {}
+        try {
+            double cvCosto = rs.getDouble("central_virtual_costo");
+            p.setCentralVirtualCosto(rs.wasNull() ? null : cvCosto);
+        } catch (Exception ignored) {}
+        try {
+            boolean multi = rs.getBoolean("es_multisede");
+            p.setEsMultisede(rs.wasNull() ? null : multi);
+        } catch (Exception ignored) {}
+        try { p.setPreciosEscalonadosJson(rs.getString("precios_escalonados_json")); } catch (Exception ignored) {}
+        try { p.setDistritosPermitidos(rs.getString("distritos_permitidos")); } catch (Exception ignored) {}
+        try { p.setProvinciasExcluidas(rs.getString("provincias_excluidas")); } catch (Exception ignored) {}
+        try {
+            int lim = rs.getInt("limite_max_cantidad");
+            p.setLimiteMaxCantidad(rs.wasNull() ? null : lim);
+        } catch (Exception ignored) {}
+        try { p.setDocumentosRequeridos(rs.getString("documentos_requeridos")); } catch (Exception ignored) {}
+
         return p;
     };
 
@@ -65,7 +100,7 @@ public class ProductoDaoImpl implements ProductoDao {
             SELECT p.*, c.nombre AS categoria_nombre 
             FROM productos p 
             LEFT JOIN categorias_producto c ON p.categoria_id = c.id 
-            ORDER BY p.created_at DESC
+            ORDER BY p.id ASC
             """;
         List<Producto> list = jdbcTemplate.query(sql, rowMapper);
         for (Producto p : list) {
@@ -99,8 +134,13 @@ public class ProductoDaoImpl implements ProductoDao {
     @Transactional
     public Producto save(Producto prod) {
         String sql = """
-            INSERT INTO productos (codigo, nombre, descripcion, categoria_id, precio_venta, stock_actual, imagen, es_pack, requiere_retorno, activo)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO productos (
+                codigo, nombre, descripcion, categoria_id, precio_venta, stock_actual, imagen, es_pack, requiere_retorno, activo,
+                tipo_producto, subcategoria, velocidad_mbps, equipamiento_incluido, telefonia_incluida,
+                requiere_ruc20, permite_hardphone, central_virtual_costo, es_multisede, precios_escalonados_json,
+                distritos_permitidos, provincias_excluidas, limite_max_cantidad, documentos_requeridos
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(con -> {
@@ -119,6 +159,22 @@ public class ProductoDaoImpl implements ProductoDao {
             ps.setBoolean(8, prod.getEsPack() != null ? prod.getEsPack() : false);
             ps.setBoolean(9, prod.getRequiereRetorno() != null ? prod.getRequiereRetorno() : false);
             ps.setBoolean(10, prod.getActivo() != null ? prod.getActivo() : true);
+
+            ps.setString(11, prod.getTipoProducto() != null ? prod.getTipoProducto() : "PLAN");
+            ps.setString(12, prod.getSubcategoria());
+            if (prod.getVelocidadMbps() != null) ps.setInt(13, prod.getVelocidadMbps()); else ps.setNull(13, java.sql.Types.INTEGER);
+            ps.setString(14, prod.getEquipamientoIncluido());
+            ps.setString(15, prod.getTelefoniaIncluida());
+            ps.setBoolean(16, prod.getRequiereRuc20() != null ? prod.getRequiereRuc20() : false);
+            ps.setBoolean(17, prod.getPermiteHardphone() != null ? prod.getPermiteHardphone() : true);
+            ps.setDouble(18, prod.getCentralVirtualCosto() != null ? prod.getCentralVirtualCosto() : 59.0);
+            ps.setBoolean(19, prod.getEsMultisede() != null ? prod.getEsMultisede() : false);
+            ps.setString(20, prod.getPreciosEscalonadosJson());
+            ps.setString(21, prod.getDistritosPermitidos());
+            ps.setString(22, prod.getProvinciasExcluidas());
+            if (prod.getLimiteMaxCantidad() != null) ps.setInt(23, prod.getLimiteMaxCantidad()); else ps.setNull(23, java.sql.Types.INTEGER);
+            ps.setString(24, prod.getDocumentosRequeridos());
+
             return ps;
         }, keyHolder);
 
@@ -139,8 +195,13 @@ public class ProductoDaoImpl implements ProductoDao {
     @Transactional
     public void update(Producto prod) {
         String sql = """
-            UPDATE productos SET codigo = ?, nombre = ?, descripcion = ?, categoria_id = ?, precio_venta = ?, 
-                                 stock_actual = ?, imagen = ?, es_pack = ?, requiere_retorno = ?, activo = ?
+            UPDATE productos SET 
+                codigo = ?, nombre = ?, descripcion = ?, categoria_id = ?, precio_venta = ?, 
+                stock_actual = ?, imagen = ?, es_pack = ?, requiere_retorno = ?, activo = ?,
+                tipo_producto = ?, subcategoria = ?, velocidad_mbps = ?, equipamiento_incluido = ?,
+                telefonia_incluida = ?, requiere_ruc20 = ?, permite_hardphone = ?, central_virtual_costo = ?,
+                es_multisede = ?, precios_escalonados_json = ?, distritos_permitidos = ?,
+                provincias_excluidas = ?, limite_max_cantidad = ?, documentos_requeridos = ?
             WHERE id = ?
             """;
         jdbcTemplate.update(sql, 
@@ -153,29 +214,44 @@ public class ProductoDaoImpl implements ProductoDao {
             prod.getImagen(), 
             prod.getEsPack(), 
             prod.getRequiereRetorno(), 
-            prod.getActivo(), 
+            prod.getActivo(),
+            prod.getTipoProducto(),
+            prod.getSubcategoria(),
+            prod.getVelocidadMbps(),
+            prod.getEquipamientoIncluido(),
+            prod.getTelefoniaIncluida(),
+            prod.getRequiereRuc20(),
+            prod.getPermiteHardphone(),
+            prod.getCentralVirtualCosto(),
+            prod.getEsMultisede(),
+            prod.getPreciosEscalonadosJson(),
+            prod.getDistritosPermitidos(),
+            prod.getProvinciasExcluidas(),
+            prod.getLimiteMaxCantidad(),
+            prod.getDocumentosRequeridos(),
             prod.getId()
         );
 
-        // Guardar composición
+        // Guardar composición si es pack
         if (Boolean.TRUE.equals(prod.getEsPack()) && prod.getComponents() != null) {
             saveComposition(prod.getId(), prod.getComponents());
-        } else {
-            jdbcTemplate.update("DELETE FROM producto_composicion WHERE producto_padre_id = ?", prod.getId());
         }
     }
 
     @Override
+    @Transactional
     public void deleteById(Long id) {
+        jdbcTemplate.update("DELETE FROM producto_composicion WHERE producto_padre_id = ?", id);
         jdbcTemplate.update("DELETE FROM productos WHERE id = ?", id);
     }
 
     @Override
     public List<ProductoComponente> findCompositionByPadreId(Long padreId) {
         String sql = """
-            SELECT pc.*, p.nombre, p.requiere_retorno, p.categoria_id 
-            FROM producto_composicion pc 
-            JOIN productos p ON pc.producto_hijo_id = p.id 
+            SELECT pc.producto_padre_id, pc.producto_hijo_id, pc.cantidad,
+                   p.nombre, p.requiere_retorno, p.categoria_id
+            FROM producto_composicion pc
+            JOIN productos p ON pc.producto_hijo_id = p.id
             WHERE pc.producto_padre_id = ?
             """;
         return jdbcTemplate.query(sql, compRowMapper, padreId);
@@ -185,10 +261,12 @@ public class ProductoDaoImpl implements ProductoDao {
     @Transactional
     public void saveComposition(Long padreId, List<ProductoComponente> components) {
         jdbcTemplate.update("DELETE FROM producto_composicion WHERE producto_padre_id = ?", padreId);
-        String sql = "INSERT INTO producto_composicion (producto_padre_id, producto_hijo_id, cantidad) VALUES (?, ?, ?)";
-        for (ProductoComponente comp : components) {
-            if (comp.getProductoHijoId() != null && comp.getCantidad() != null && comp.getCantidad() > 0) {
-                jdbcTemplate.update(sql, padreId, comp.getProductoHijoId(), comp.getCantidad());
+        if (components != null && !components.isEmpty()) {
+            String insertSql = "INSERT INTO producto_composicion (producto_padre_id, producto_hijo_id, cantidad) VALUES (?, ?, ?)";
+            for (ProductoComponente c : components) {
+                if (c.getProductoHijoId() != null) {
+                    jdbcTemplate.update(insertSql, padreId, c.getProductoHijoId(), c.getCantidad() != null ? c.getCantidad() : 1.0);
+                }
             }
         }
     }

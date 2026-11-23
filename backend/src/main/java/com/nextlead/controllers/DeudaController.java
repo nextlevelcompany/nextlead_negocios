@@ -60,6 +60,25 @@ public class DeudaController {
         }
     }
 
+    @GetMapping("/proximas-cuotas")
+    public ResponseEntity<?> getUpcomingInstallments() {
+        try {
+            List<Map<String, Object>> installments = jdbcTemplate.queryForList(
+                "SELECT c.*, d.entidad_bancaria, d.numero_prestamo, d.moneda, d.tcea, " +
+                "       (c.fecha_vencimiento - CURRENT_DATE) as dias_restantes " +
+                "FROM deudas_cuotas c " +
+                "JOIN deudas_bancarias d ON c.deuda_id = d.id " +
+                "WHERE c.estado = 'Pendiente' " +
+                "ORDER BY c.fecha_vencimiento ASC " +
+                "LIMIT 60"
+            );
+            return ResponseEntity.ok(installments);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al obtener próximas cuotas: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/save")
     @Transactional
     public ResponseEntity<?> addLoan(@RequestBody SaveLoanRequest req) {
@@ -79,12 +98,13 @@ public class DeudaController {
 
             Date dateInicio = Date.valueOf(req.fecha_inicio);
             boolean isEdit = req.id != null;
+            String finalNotas = req.notas != null ? req.notas : req.notes;
 
             if (isEdit) {
-                // If edit, only edit description/notes, bank name or loan number
+                // If edit, update description/notes, bank name or loan number
                 jdbcTemplate.update(
                     "UPDATE deudas_bancarias SET entidad_bancaria = ?, numero_prestamo = ?, notas = ? WHERE id = ?",
-                    req.entidad_bancaria, req.numero_prestamo, req.notas, req.id
+                    req.entidad_bancaria, req.numero_prestamo, finalNotas, req.id
                 );
                 return ResponseEntity.ok(Map.of("message", "Préstamo actualizado con éxito.", "id", req.id));
             } else {
@@ -94,7 +114,7 @@ public class DeudaController {
                     "fecha_inicio, cuotas_totales, tcea, estado, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     req.entidad_bancaria, req.numero_prestamo, req.monto_prestado,
                     req.moneda != null ? req.moneda : "PEN", dateInicio, req.cuotas_totales,
-                    req.tcea != null ? req.tcea : 0.0, "Activa", req.notes
+                    req.tcea != null ? req.tcea : 0.0, "Activa", finalNotas
                 );
 
                 Long loanId = jdbcTemplate.queryForObject("SELECT lastval()", Long.class);
@@ -113,19 +133,45 @@ public class DeudaController {
                     defaultUserId, new java.sql.Timestamp(System.currentTimeMillis())
                 );
 
-                // Auto-generate installments templates (simple linear division)
-                double baseQuota = req.monto_prestado / req.cuotas_totales;
+                // Auto-generate installments with amortization calculation
+                double tceaRate = (req.tcea != null && req.tcea > 0) ? req.tcea : 0.0;
+                double principal = req.monto_prestado;
+                int n = req.cuotas_totales;
+
                 Calendar cal = Calendar.getInstance();
                 cal.setTime(dateInicio);
 
-                for (int i = 1; i <= req.cuotas_totales; i++) {
-                    cal.add(Calendar.MONTH, 1);
-                    Date dueDate = new Date(cal.getTimeInMillis());
-                    jdbcTemplate.update(
-                        "INSERT INTO deudas_cuotas (deuda_id, numero_cuota, fecha_vencimiento, monto_cuota, capital, interes, estado) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        loanId, i, dueDate, baseQuota, baseQuota, 0.0, "Pendiente"
-                    );
+                if (tceaRate > 0) {
+                    // French Amortization
+                    double monthlyRate = Math.pow(1.0 + (tceaRate / 100.0), 1.0 / 12.0) - 1.0;
+                    double fixedQuota = principal * (monthlyRate * Math.pow(1.0 + monthlyRate, n)) / (Math.pow(1.0 + monthlyRate, n) - 1.0);
+                    double remainingBalance = principal;
+
+                    for (int i = 1; i <= n; i++) {
+                        cal.add(Calendar.MONTH, 1);
+                        Date dueDate = new Date(cal.getTimeInMillis());
+                        double interest = remainingBalance * monthlyRate;
+                        double capital = (i == n) ? remainingBalance : (fixedQuota - interest);
+                        double quota = capital + interest;
+                        remainingBalance = Math.max(0, remainingBalance - capital);
+
+                        jdbcTemplate.update(
+                            "INSERT INTO deudas_cuotas (deuda_id, numero_cuota, fecha_vencimiento, monto_cuota, capital, interes, seguro_comisiones, estado) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, 0.0, 'Pendiente')",
+                            loanId, i, dueDate, Math.round(quota * 100.0) / 100.0, Math.round(capital * 100.0) / 100.0, Math.round(interest * 100.0) / 100.0
+                        );
+                    }
+                } else {
+                    double baseQuota = Math.round((principal / n) * 100.0) / 100.0;
+                    for (int i = 1; i <= n; i++) {
+                        cal.add(Calendar.MONTH, 1);
+                        Date dueDate = new Date(cal.getTimeInMillis());
+                        jdbcTemplate.update(
+                            "INSERT INTO deudas_cuotas (deuda_id, numero_cuota, fecha_vencimiento, monto_cuota, capital, interes, seguro_comisiones, estado) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, 0.0, 'Pendiente')",
+                            loanId, i, dueDate, baseQuota, baseQuota, 0.0
+                        );
+                    }
                 }
 
                 return ResponseEntity.status(HttpStatus.CREATED)

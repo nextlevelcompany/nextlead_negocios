@@ -8,6 +8,7 @@ import jakarta.annotation.PostConstruct;
 import java.util.TimeZone;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -76,55 +77,39 @@ public class SettingsService {
 
     public Map<String, String> getAllSettings() {
         Map<String, String> settings = new HashMap<>();
-        settings.put("whatsapp.api.token", getSetting("whatsapp.api.token"));
-        settings.put("whatsapp.phone.id", getSetting("whatsapp.phone.id"));
-        settings.put("whatsapp.verify.token", getSetting("whatsapp.verify.token"));
-        settings.put("whatsapp.display.number", getSetting("whatsapp.display.number"));
-        settings.put("gemini.api.key", getSetting("gemini.api.key"));
-        settings.put("gemini.model", getSetting("gemini.model"));
-        settings.put("gemini.system.prompt", getSetting("gemini.system.prompt"));
-        settings.put("ai.active", getSetting("ai.active"));
-        settings.put("ai.agent.name", getSetting("ai.agent.name"));
-        settings.put("ai.business.description", getSetting("ai.business.description"));
-        settings.put("ai.tone", getSetting("ai.tone"));
-        settings.put("ai.max.quota", getSetting("ai.max.quota"));
-        
-        // Visual flow builder settings
-        settings.put("ai.business.type", getSetting("ai.business.type"));
-        settings.put("ai.ask.container", getSetting("ai.ask.container"));
-        settings.put("ai.ask.container.text", getSetting("ai.ask.container.text"));
-        settings.put("ai.collect.location", getSetting("ai.collect.location"));
-        settings.put("ai.collect.location.text", getSetting("ai.collect.location.text"));
-        settings.put("ai.products.promotion", getSetting("ai.products.promotion"));
-        settings.put("ai.products.promotion.text", getSetting("ai.products.promotion.text"));
-        settings.put("ai.products.promotion.media.ids", getSetting("ai.products.promotion.media.ids"));
-        settings.put("ai.products.promotion.media.type", getSetting("ai.products.promotion.media.type"));
-        settings.put("ai.products.promotion.post.text", getSetting("ai.products.promotion.post.text"));
-        settings.put("ai.products.promotion.keywords", getSetting("ai.products.promotion.keywords"));
-        settings.put("ai.collect.document", getSetting("ai.collect.document"));
-        settings.put("ai.collect.document.text", getSetting("ai.collect.document.text"));
-        settings.put("ai.greeting.new", getSetting("ai.greeting.new"));
-        settings.put("ai.greeting.new.media.type", getSetting("ai.greeting.new.media.type"));
-        settings.put("ai.greeting.new.media.ids", getSetting("ai.greeting.new.media.ids"));
-        settings.put("ai.greeting.registered", getSetting("ai.greeting.registered"));
-        settings.put("ai.greeting.registered.media.type", getSetting("ai.greeting.registered.media.type"));
-        settings.put("ai.greeting.registered.media.ids", getSetting("ai.greeting.registered.media.ids"));
-        settings.put("ai.payment.methods", getSetting("ai.payment.methods"));
-        settings.put("ai.order.collect", getSetting("ai.order.collect"));
-        settings.put("ai.order.collect.text", getSetting("ai.order.collect.text"));
-        settings.put("ai.custom.instructions", getSetting("ai.custom.instructions"));
-        settings.put("ai.flow.order", getSetting("ai.flow.order"));
-        settings.put("empresa.nombre", getSetting("empresa.nombre"));
-        settings.put("empresa.ruc", getSetting("empresa.ruc"));
-        settings.put("empresa.telefono", getSetting("empresa.telefono"));
-        settings.put("empresa.logo", getSetting("empresa.logo"));
-        settings.put("empresa.logo.height", getSetting("empresa.logo.height"));
-        settings.put("empresa.favicon", getSetting("empresa.favicon"));
-        settings.put("empresa.favicon.height", getSetting("empresa.favicon.height"));
-        settings.put("timezone", getSetting("timezone"));
-        settings.put("formato.fecha", getSetting("formato.fecha"));
-        settings.put("formato.hora", getSetting("formato.hora"));
-        settings.put("igv.porcentaje", getSetting("igv.porcentaje"));
+
+        // 1. Cargar todos los ajustes reales desde la base de datos
+        List<com.nextlead.models.SystemSetting> allDbSettings = settingsDao.getAllSettings();
+        if (allDbSettings != null) {
+            for (com.nextlead.models.SystemSetting s : allDbSettings) {
+                if (s.getKeyName() != null && s.getValueText() != null) {
+                    settings.put(s.getKeyName(), s.getValueText());
+                }
+            }
+        }
+
+        // 2. Asegurar fallbacks si no existen en BD
+        settings.putIfAbsent("whatsapp.api.token", getFallback("whatsapp.api.token"));
+        settings.putIfAbsent("whatsapp.phone.id", getFallback("whatsapp.phone.id"));
+        settings.putIfAbsent("whatsapp.verify.token", getFallback("whatsapp.verify.token"));
+        settings.putIfAbsent("whatsapp.display.number", getFallback("whatsapp.display.number"));
+        settings.putIfAbsent("gemini.api.key", getFallback("gemini.api.key"));
+        settings.putIfAbsent("gemini.model", getFallback("gemini.model"));
+        settings.putIfAbsent("gemini.system.prompt", getFallback("gemini.system.prompt"));
+        settings.putIfAbsent("ai.active", getFallback("ai.active"));
+        settings.putIfAbsent("ai.agent.name", getFallback("ai.agent.name"));
+        settings.putIfAbsent("ai.business.description", getFallback("ai.business.description"));
+        settings.putIfAbsent("ai.tone", getFallback("ai.tone"));
+        settings.putIfAbsent("ai.max.quota", getFallback("ai.max.quota"));
+        settings.putIfAbsent("ai.business.type", getFallback("ai.business.type"));
+        settings.putIfAbsent("negocio.tipo_modelo", "TELECOM");
+        settings.putIfAbsent("empresa.nombre", "NextLead Negocios");
+        settings.putIfAbsent("empresa.ruc", "20608976541");
+        settings.putIfAbsent("timezone", "America/Lima");
+        settings.putIfAbsent("formato.fecha", "d/m/Y");
+        settings.putIfAbsent("formato.hora", "24h");
+        settings.putIfAbsent("igv.porcentaje", "18");
+
         return settings;
     }
 

@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Insertar usuario admin por defecto (username: admin, password: admin123)
 -- El hash corresponde a 'admin123' usando BCrypt
 INSERT INTO users (username, password, role)
-VALUES ('admin', '$2a$10$3qmN3JiCajG5W2xrAMX1fexcOk59QXICEQd3Drjd.4u1PmUs1pD.6', 'ADMIN')
+VALUES ('admin', '$2a$06$RKnjshpZGEaGkvrYzts.POcOfm3atYZ9eH2ku44hmLy6ryrOC7hPq', 'ADMIN')
 ON CONFLICT (username) DO NOTHING;
 
 -- Asegurar que las columnas del perfil existan si la tabla ya había sido creada sin ellas
@@ -126,6 +126,20 @@ CREATE TABLE IF NOT EXISTS productos (
     es_pack BOOLEAN DEFAULT FALSE,
     requiere_retorno BOOLEAN DEFAULT FALSE,
     activo BOOLEAN DEFAULT TRUE,
+    tipo_producto VARCHAR(30) DEFAULT 'PLAN',
+    subcategoria VARCHAR(60),
+    velocidad_mbps INT,
+    equipamiento_incluido TEXT,
+    telefonia_incluida TEXT,
+    requiere_ruc20 BOOLEAN DEFAULT FALSE,
+    permite_hardphone BOOLEAN DEFAULT TRUE,
+    central_virtual_costo NUMERIC(10,2) DEFAULT 59.00,
+    es_multisede BOOLEAN DEFAULT FALSE,
+    precios_escalonados_json TEXT,
+    distritos_permitidos TEXT,
+    provincias_excluidas TEXT,
+    limite_max_cantidad INT,
+    documentos_requeridos TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -136,32 +150,50 @@ CREATE TABLE IF NOT EXISTS producto_composicion (
     PRIMARY KEY (producto_padre_id, producto_hijo_id)
 );
 
--- Seed Categorías
+-- Seed Categorías Oficiales ON Negocios
 INSERT INTO categorias_producto (nombre, descripcion, activo) VALUES
-('Envase 20L', 'Categoría para envases vacíos de 20 litros', TRUE),
-('Bidón 10L', 'Categoría para bidones de 10 litros', TRUE),
-('Recargas 20L', 'Categoría para recargas de agua en bidones de 20 litros', TRUE),
-('Bidón Completo (Envase + Recarga)', 'Combo inicial de envase nuevo con recarga de agua', TRUE),
-('Promociones', 'Packs promocionales y ofertas especiales', TRUE)
+('Planes Internet LITE', 'Planes de solo Internet 100% fibra óptica simétrica (GPON) al 70% garantizado con IP Fija y Asistencia 24/7 sin Ciberseguridad.', TRUE),
+('Planes Internet PLUS', 'Planes de Internet 100% fibra óptica con Ciberseguridad Virtual Fortinet (Web Filter + IPS) e IP Pública Fija.', TRUE),
+('Planes PLUS + Router Avanzado', 'Planes PLUS con Router Avanzado MikroTik (L009UiGS). Exclusivo RUC 20. Habilita SVAs de VPN y Pools de IP.', TRUE),
+('Planes Business', 'Planes Business con equipamiento empresarial Omada (ER706W). Exclusivo RUC 20 con Ciberseguridad Fortinet e Instalación Gratuita.', TRUE),
+('Servicios Adicionales Recurrentes (SVA)', 'Servicios mensuales adicionales de Redes, VPNs, Pools de IP, Equipamiento Wi-Fi adicional y Central Virtual.', TRUE),
+('Servicios y Cargos de Pago Único', 'Cargos únicos de instalación en horarios especiales, factibilidad previa, cableado de puntos de red y garantía comercial.', TRUE)
 ON CONFLICT (nombre) DO NOTHING;
 
--- Seed Productos
-INSERT INTO productos (codigo, nombre, descripcion, categoria_id, precio_venta, stock_actual, es_pack, requiere_retorno, activo) VALUES
-('E_B20LSN', 'Envase Bidón 20 L Sin Caño', 'Envase Bidón 20 L Sin Caño', (SELECT id FROM categorias_producto WHERE nombre = 'Envase 20L'), 13.00, 0, FALSE, FALSE, TRUE),
-('EB_10L', 'Envase Bidón 10 L', 'Envase Bidón 10 L', (SELECT id FROM categorias_producto WHERE nombre = 'Bidón 10L'), 0.00, -149, FALSE, FALSE, TRUE),
-('RB10_', 'Recarga Bidón 10L', 'Recarga Bidón 10L', (SELECT id FROM categorias_producto WHERE nombre = 'Bidón 10L'), 0.00, -272, FALSE, FALSE, TRUE),
-('E_B20LCN', 'Envase Bidón 20 L Con Caño', 'Envase Bidón 20 L Con Caño', (SELECT id FROM categorias_producto WHERE nombre = 'Envase 20L'), 13.00, -6, FALSE, FALSE, TRUE),
-('B20L-C-R', 'Recarga Bidón 20L con Caño', 'Recarga de bidón 20L de agua alcalina con caño', (SELECT id FROM categorias_producto WHERE nombre = 'Recargas 20L'), 16.00, -446, FALSE, FALSE, TRUE),
-('B20L-SC-R', 'Recarga Bidón 20L sin Caño', 'Recarga de 20L para dispensador. Agua ozonizada sin caño', (SELECT id FROM categorias_producto WHERE nombre = 'Recargas 20L'), 16.00, -17, FALSE, FALSE, TRUE),
-('B20L-C-E', 'Bidón 20L (Envase + Recarga) con Caño', '¡Bienvenido a Antarqui! ✨ Incluye Bidón de 20L con caño más recarga de agua.', (SELECT id FROM categorias_producto WHERE nombre = 'Bidón Completo (Envase + Recarga)'), 30.00, 0, FALSE, FALSE, TRUE),
-('B20L-SC-E', 'Bidón 20L (Envase + Recarga) sin Caño', 'Pack de inicio: Envase Nuevo + 20L de agua ozonizada sin caño.', (SELECT id FROM categorias_producto WHERE nombre = 'Bidón Completo (Envase + Recarga)'), 30.00, 0, FALSE, FALSE, TRUE),
-('B10L-I', 'Bidón 10L No Retornable', 'Bidón práctico de 10L No Retornable.', (SELECT id FROM categorias_producto WHERE nombre = 'Bidón 10L'), 7.50, -130, FALSE, FALSE, TRUE),
-('P4-B10L', 'Pack 4 Bidones 10L', 'OFERTA: Lleva 4 bidones de 10L y paga solo por una fracción.', (SELECT id FROM categorias_producto WHERE nombre = 'Bidón 10L'), 24.00, 0, TRUE, FALSE, TRUE),
-('P6-B10L', 'Pack 6 Bidones 10L', 'SUPER PRECIO: 6 unidades de 10L (S/ 5.50 c/u)', (SELECT id FROM categorias_producto WHERE nombre = 'Bidón 10L'), 33.00, 0, TRUE, FALSE, TRUE),
-('P8-B10L', 'Pack 8 Bidones 10L', 'MAXI AHORRO: 8 bidones de 10L a precio de distribuidor.', (SELECT id FROM categorias_producto WHERE nombre = 'Bidón 10L'), 40.00, 0, TRUE, FALSE, TRUE),
-('P3-B20LC-B10LG', 'Pack 3 Recargas 20L con Caño + 1 Bidon de 10 L', 'PROMO ESTRELLA: 3 Recargas de 20L + 1 Bidón de 10L gratis', (SELECT id FROM categorias_producto WHERE nombre = 'Promociones'), 48.00, 0, TRUE, FALSE, TRUE),
-('P3-B20LC', 'Pack 3 Recargas Bidón 20L con Caño', 'Trío Saludable: 3 Recargas de 20L con caño', (SELECT id FROM categorias_producto WHERE nombre = 'Promociones'), 45.00, 0, TRUE, FALSE, TRUE),
-('P3-B20LE-B10LG', 'Pack 3 Recargas Bidón 20L + Envase + Bidón 10L gratis', 'COMBO NUEVO CLIENTE: 3 Bidones nuevos (Lleva envase + recarga) + 1 bidón de 10L gratis', (SELECT id FROM categorias_producto WHERE nombre = 'Promociones'), 90.00, 0, TRUE, FALSE, TRUE)
+-- Seed Catálogo ON Negocios
+INSERT INTO productos (
+    codigo, nombre, descripcion, categoria_id, precio_venta, stock_actual, es_pack, requiere_retorno, activo,
+    tipo_producto, subcategoria, velocidad_mbps, equipamiento_incluido, telefonia_incluida,
+    requiere_ruc20, permite_hardphone, central_virtual_costo, es_multisede, precios_escalonados_json,
+    distritos_permitidos, provincias_excluidas, limite_max_cantidad, documentos_requeridos
+) VALUES
+('PLAN-200-LITE', 'ON Negocios 200 LITE', 'Internet 100% Fibra Óptica Simétrica (GPON) 200 Mbps al 70% garantizado con IP Pública Fija y Asistencia 24/7. Exclusivo para Multisedes (mínimo 2 sedes). No disponible en Arequipa, Chiclayo ni Piura.', (SELECT id FROM categorias_producto WHERE nombre = 'Planes Internet LITE'), 179.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'Internet LITE', 200, '1 ONT Wi-Fi 6 (Huawei EG8145X6) + 1 Access Point Wi-Fi 6 (Huawei K562e-10)', '1 línea (1000 min) a elegir entre Softphone o Hardphone', FALSE, TRUE, 59.00, TRUE, '[{"min_sedes":2,"max_sedes":2,"precio":179.00},{"min_sedes":3,"max_sedes":3,"precio":169.00},{"min_sedes":4,"max_sedes":999,"precio":159.00}]', NULL, 'AREQUIPA,CHICLAYO,PIURA', NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales'),
+('PLAN-300-LITE', 'ON Negocios 300 LITE', 'Internet 100% Fibra Óptica Simétrica (GPON) 300 Mbps al 70% garantizado con IP Pública Fija y Asistencia Técnica Remota 24/7.', (SELECT id FROM categorias_producto WHERE nombre = 'Planes Internet LITE'), 199.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'Internet LITE', 300, '1 ONT Wi-Fi 6 (Huawei) + 1 Access Point (Huawei)', '1 línea (1000 min) a elegir entre Softphone o Hardphone', FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales'),
+('PLAN-600-LITE', 'ON Negocios 600 LITE', 'Internet 100% Fibra Óptica Simétrica (GPON) 600 Mbps al 70% garantizado con IP Pública Fija y Asistencia Técnica Remota 24/7.', (SELECT id FROM categorias_producto WHERE nombre = 'Planes Internet LITE'), 259.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'Internet LITE', 600, '1 ONT Wi-Fi 6 (Huawei) + 2 Access Points (Huawei)', '1 línea (1000 min) a elegir entre Softphone o Hardphone', FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales'),
+('PLAN-1000-LITE', 'ON Negocios 1000 LITE', 'Internet 100% Fibra Óptica Simétrica (GPON) 1000 Mbps al 70% garantizado con IP Pública Fija. Exclusivo para distritos de Miraflores y San Isidro. No disponible en provincias.', (SELECT id FROM categorias_producto WHERE nombre = 'Planes Internet LITE'), 299.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'Internet LITE', 1000, '1 ONT Wi-Fi 6 (Huawei) + 2 Access Points (Huawei)', '1 línea (1000 min) a elegir entre Softphone o Hardphone', FALSE, TRUE, 59.00, FALSE, NULL, 'MIRAFLORES,SAN ISIDRO', 'AREQUIPA,CHICLAYO,PIURA,TODAS_PROVINCIAS', NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales'),
+('PLAN-300-PLUS', 'ON Negocios 300 PLUS', 'Internet 100% Fibra Óptica 300 Mbps con Seguridad Virtual Fortinet (Web Filter + IPS), IP Pública Fija y Asistencia Técnica 24/7. Central Virtual disponible con costo adicional.', (SELECT id FROM categorias_producto WHERE nombre = 'Planes Internet PLUS'), 249.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'Internet PLUS', 300, '1 ONT Wi-Fi 6 (Huawei) + 1 Access Point (Huawei)', '1 línea (1000 min) a elegir entre Softphone o Hardphone', FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales, Anexo Seguridad en la Nube'),
+('PLAN-400-PLUS', 'ON Negocios 400 PLUS', 'Internet 100% Fibra Óptica 400 Mbps con Seguridad Virtual Fortinet (Web Filter + IPS) y Central Virtual Gratuita (S/ 0.00 para 1 línea a solicitud).', (SELECT id FROM categorias_producto WHERE nombre = 'Planes Internet PLUS'), 349.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'Internet PLUS', 400, '1 ONT Wi-Fi 6 (Huawei) + 2 Access Points (Huawei)', '1 línea (1000 min) a elegir entre Softphone o Hardphone', FALSE, TRUE, 0.00, FALSE, NULL, NULL, NULL, NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales, Anexo Seguridad en la Nube'),
+('PLAN-600-PLUS', 'ON Negocios 600 PLUS', 'Internet 100% Fibra Óptica 600 Mbps con Seguridad Virtual Fortinet (Web Filter + IPS) y Central Virtual Gratuita (S/ 0.00 para 1 línea a solicitud).', (SELECT id FROM categorias_producto WHERE nombre = 'Planes Internet PLUS'), 439.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'Internet PLUS', 600, '1 ONT Wi-Fi 6 (Huawei) + 3 Access Points (Huawei)', '1 línea (1000 min) a elegir entre Softphone o Hardphone', FALSE, TRUE, 0.00, FALSE, NULL, NULL, NULL, NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales, Anexo Seguridad en la Nube'),
+('PLAN-400-PLUS-ROUTER', 'ON Negocios 400 PLUS + Router', 'Plan exclusivo para clientes RUC 20. 400 Mbps con Seguridad Fortinet, Router MikroTik L009UiGS en Modo Bridge y Central Virtual S/ 0.00. Habilita SVAs de VPN y Pools de IP. Solo Softphone.', (SELECT id FROM categorias_producto WHERE nombre = 'Planes PLUS + Router Avanzado'), 419.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'PLUS + Router', 400, '1 ONT Wi-Fi 6 (Modo Bridge) + 1 Router Avanzado MikroTik (L009UiGS) + 2 Access Points TP-Link Wi-Fi 6 (HX520)', '1 línea (1000 min) SOLO Softphone (NO permite Hardphone)', TRUE, FALSE, 0.00, FALSE, NULL, NULL, NULL, NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales, Anexo Seguridad en la Nube, Contrato Equipamiento MikroTik'),
+('PLAN-600-PLUS-ROUTER', 'ON Negocios 600 PLUS + Router', 'Plan exclusivo para clientes RUC 20. 600 Mbps con Seguridad Fortinet, Router MikroTik L009UiGS en Modo Bridge y Central Virtual S/ 0.00. Habilita SVAs de VPN y Pools de IP. Solo Softphone.', (SELECT id FROM categorias_producto WHERE nombre = 'Planes PLUS + Router Avanzado'), 439.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'PLUS + Router', 600, '1 ONT Wi-Fi 6 (Modo Bridge) + 1 Router Avanzado MikroTik (L009UiGS) + 3 Access Points TP-Link Wi-Fi 6 (HX520)', '1 línea (1000 min) SOLO Softphone (NO permite Hardphone)', TRUE, FALSE, 0.00, FALSE, NULL, NULL, NULL, NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales, Anexo Seguridad en la Nube, Contrato Equipamiento MikroTik'),
+('PLAN-300-BUSINESS', 'ON Negocios 300 Business Plus', 'Plan exclusivo para clientes RUC 20. 300 Mbps con Router Avanzado Omada ER706W, Seguridad Fortinet e Instalación Gratuita.', (SELECT id FROM categorias_producto WHERE nombre = 'Planes Business'), 319.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'Business', 300, '1 Router Wi-Fi 6 Avanzado Omada (ER706W)', '1 línea (1000 min) Softphone o Hardphone', TRUE, TRUE, 59.00, FALSE, NULL, NULL, NULL, NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales, Anexo Seguridad en la Nube'),
+('PLAN-400-BUSINESS-WIFI', 'ON Negocios 400 Business WiFi Plus', 'Plan exclusivo RUC 20. 400 Mbps con Router Omada ER706W + Access Point PRO Omada EAP650 + Cableado UTP Cat6 hasta 30m. Central Virtual incluida e Instalación Gratuita.', (SELECT id FROM categorias_producto WHERE nombre = 'Planes Business'), 419.00, 999, FALSE, FALSE, TRUE, 'PLAN', 'Business', 400, '1 Router Wi-Fi 6 Avanzado Omada (ER706W) + 1 Access Point PRO Omada (EAP650) + Cableado UTP Cat6', '1 línea (1000 min) Softphone o Hardphone', TRUE, TRUE, 0.00, FALSE, NULL, NULL, NULL, NULL, 'Contrato de Arrendamiento, Anexo I, Anexo Contactos Oficiales, Anexo Seguridad en la Nube'),
+('SVA-VPN-S2S', 'VPN Site-to-Site', '1 única conexión túnel IPsec entre 2 sedes con router avanzado (solo 1 sede contrata). Requiere Plan PLUS + Router o Business y RUC 20.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 40.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Redes, VPN e IPs', NULL, 'Túnel IPsec Site-to-Site', NULL, TRUE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 1, 'Anexo Solicitud VPN Site-to-Site'),
+('SVA-VPN-S2C', 'VPN Site-to-Client', 'Túnel L2TP/IPsec solo para PC (no móviles). Máximo 10 usuarios. Requiere Plan PLUS + Router o Business y RUC 20.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 20.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Redes, VPN e IPs', NULL, 'Acceso remoto L2TP/IPsec por usuario', NULL, TRUE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 10, 'Anexo Solicitud VPN Site-to-Client'),
+('SVA-POOL-4IP', 'Pool 4 IP Pública Adicional (/30)', '1 IP utilizable en segmento distinto. Sin modo Bridge, sin NAP Perú ni geolocalización. Requiere Plan PLUS + Router o Business y RUC 20.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 30.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Redes, VPN e IPs', NULL, 'Enrutamiento /30 (1 IP útil)', NULL, TRUE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 4, 'Anexo Asignación de Pool IP Pública'),
+('SVA-POOL-8IP', 'Pool 8 IP Pública Adicional (/29)', '5 IPs utilizables en segmento distinto. Sin modo Bridge, sin NAP Perú ni geolocalización. Requiere Plan PLUS + Router o Business y RUC 20.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 60.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Redes, VPN e IPs', NULL, 'Enrutamiento /29 (5 IPs útiles)', NULL, TRUE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 2, 'Anexo Asignación de Pool IP Pública'),
+('SVA-AP-HUAWEI', 'Access Point Adicional (Huawei)', 'Punto de acceso Wi-Fi 6 adicional en comodato. Máximo 4 dispositivos en total por cliente.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 20.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Equipamiento Wi-Fi Adicional', NULL, '1 AP Wi-Fi 6 Huawei en comodato', NULL, FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 4, 'Anexo Comodato de Equipos'),
+('SVA-AP-OMADA-PRO', 'Access Point PRO (Omada EAP650)', 'Wi-Fi 6 empresarial, portal Omada, soporte remoto y cableado Cat6 hasta 30 m. Exclusivo planes PLUS + Router y Business (RUC 20).', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 80.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Equipamiento Wi-Fi Adicional', NULL, '1 AP PRO Omada EAP650 + Cableado Cat6 30m', NULL, TRUE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 6, 'Anexo Equipamiento Empresarial Omada'),
+('SVA-CENTRAL-VIRTUAL', 'Central Virtual (WN 1000)', 'Central Yeastar en la nube, 1000 min, hasta 4 anexos softphone Linkus, IVR, colas y portabilidad.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 59.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Telefonía y Central Virtual', NULL, 'Central Yeastar Cloud + 4 anexos Linkus', '1000 min multidestino', FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 1, 'Contrato de Telefonía y Central Virtual Cloud'),
+('SVA-ANEXO-CV', 'Anexo Adicional Central Virtual', 'Anexo adicional Linkus. Requiere Central Virtual activa. Máximo 45 anexos adicionales.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 10.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Telefonía y Central Virtual', NULL, '1 Anexo Linkus adicional', NULL, FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 45, 'Anexo Licenciamiento Central Virtual'),
+('SVA-TEL-YEALINK', 'Teléfono IP (Yealink T31P)', 'Teléfono IP para escritorio. Requiere Central Virtual activa (consume 1 licencia de anexo). Máximo 1 por central.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 30.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Telefonía y Central Virtual', NULL, '1 Teléfono IP Yealink T31P', NULL, FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 1, 'Anexo Comodato Teléfono IP'),
+('SVA-LINEA-1000', 'Línea Telefónica Plan 1000', '1 numeración fija, 1000 min todo destino nacional, 1 softphone MAX UC o 1 hardphone. Máximo 10 líneas.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 30.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Telefonía y Central Virtual', NULL, '1 Línea fija digital', '1000 min nacional', FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 10, 'Contrato Servicio Telefónico Fijo'),
+('SVA-LINEA-100', 'Línea Telefónica Plan 100', '1 numeración fija, 100 min todo destino nacional, 1 hardphone (solo 1 aparato).', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios Adicionales Recurrentes (SVA)'), 10.00, 999, FALSE, FALSE, TRUE, 'SVA', 'Telefonía y Central Virtual', NULL, '1 Línea analógica básica', '100 min nacional', FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 5, 'Contrato Servicio Telefónico Fijo'),
+('PAGO-CABLEADO-RED', 'Cableado de Punto de Red', '1 punto UTP Cat6 hasta 35 m con terminal y caja (sin canaletas, 1 mes garantía).', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios y Cargos de Pago Único'), 118.00, 999, FALSE, FALSE, TRUE, 'CARGO_UNICO', 'Cargos de Instalación y Obra', NULL, 'Punto UTP Cat6 hasta 35m', NULL, FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 50, 'Orden de Trabajo de Cableado Estructurado'),
+('PAGO-FACTIBILIDAD', 'Visita de Factibilidad Previa', 'Inspección técnica presencial con reporte detallado y fotos.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios y Cargos de Pago Único'), 120.00, 999, FALSE, FALSE, TRUE, 'CARGO_UNICO', 'Servicios Técnicos Previos', NULL, 'Reporte de Factibilidad Presencial con Fotos', NULL, FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 10, 'Reporte de Factibilidad Técnica'),
+('PAGO-INSTALACION-NOCHE', 'Instalación Turno Noche / Madrugada', 'Cuadrilla técnica nocturna (23:00 a 05:00 horas).', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios y Cargos de Pago Único'), 775.00, 999, FALSE, FALSE, TRUE, 'CARGO_UNICO', 'Cargos de Instalación y Obra', NULL, 'Cuadrilla nocturna certificada', NULL, FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 5, 'Acta de Instalación Horario Especial'),
+('PAGO-INSTALACION-CC', 'Instalación en Centro Comercial', 'Sobrecosto por normas de seguridad e infraestructura en Mall.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios y Cargos de Pago Único'), 1200.00, 999, FALSE, FALSE, TRUE, 'CARGO_UNICO', 'Cargos de Instalación y Obra', NULL, 'Permisos y seguridad Mall', NULL, FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 5, 'Permiso de Trabajo Centro Comercial'),
+('PAGO-GARANTIA', 'Cargo de Garantía Comercial', 'Depósito en garantía por política de riesgo; amortizable al 6.º mes.', (SELECT id FROM categorias_producto WHERE nombre = 'Servicios y Cargos de Pago Único'), 120.00, 999, FALSE, FALSE, TRUE, 'CARGO_UNICO', 'Garantías Financieras', NULL, 'Depósito en Garantía', NULL, FALSE, TRUE, 59.00, FALSE, NULL, NULL, NULL, 1, 'Acuerdo de Depósito en Garantía')
 ON CONFLICT (codigo) DO NOTHING;
 
 
@@ -723,3 +755,154 @@ ALTER TABLE ventas ADD COLUMN IF NOT EXISTS igv NUMERIC(12, 2) NOT NULL DEFAULT 
 ALTER TABLE ventas ADD COLUMN IF NOT EXISTS direccion_entrega VARCHAR(255);
 
 
+
+
+-- ============================================================================
+-- MÓDULO DE RENTABILIDAD, COMISIONES Y DEALER ON NEGOCIOS (Referencia v10)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS rentabilidad_config_global (
+    id SERIAL PRIMARY KEY,
+    clave VARCHAR(50) UNIQUE NOT NULL,
+    valor VARCHAR(100) NOT NULL,
+    descripcion TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rentabilidad_dealer_parametros (
+    id SERIAL PRIMARY KEY,
+    ventas_minimas INT UNIQUE NOT NULL,
+    factor_dealer NUMERIC(6,3) NOT NULL,
+    bono_unitario NUMERIC(12,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rentabilidad_perfiles (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) UNIQUE NOT NULL,
+    sueldo_base NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    gastos_adicionales_defecto NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    descripcion TEXT,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    orden INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rentabilidad_escalas_comisiones (
+    id SERIAL PRIMARY KEY,
+    perfil_id INT NOT NULL REFERENCES rentabilidad_perfiles(id) ON DELETE CASCADE,
+    rango_nombre VARCHAR(50) NOT NULL,
+    ventas_minimas INT NOT NULL,
+    ventas_maximas INT,
+    factor_comision NUMERIC(6,3) NOT NULL DEFAULT 0.000,
+    bono_fijo NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rentabilidad_personal (
+    id SERIAL PRIMARY KEY,
+    trabajador_id INT REFERENCES trabajadores(id) ON DELETE SET NULL,
+    perfil_id INT NOT NULL REFERENCES rentabilidad_perfiles(id) ON DELETE RESTRICT,
+    nombre_completo VARCHAR(150) NOT NULL,
+    documento_identidad VARCHAR(20),
+    sueldo_base NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    gastos_adicionales NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    telefono VARCHAR(30),
+    email VARCHAR(100),
+    fecha_ingreso DATE DEFAULT CURRENT_DATE,
+    estado VARCHAR(20) NOT NULL DEFAULT 'Activo',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rentabilidad_liquidaciones (
+    id SERIAL PRIMARY KEY,
+    codigo_liquidacion VARCHAR(50) UNIQUE NOT NULL,
+    mes INT NOT NULL,
+    anio INT NOT NULL,
+    total_altas_dealer INT NOT NULL DEFAULT 0,
+    ingresos_brutos_dealer NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    total_pagos_personal NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    total_gastos_personal NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    gastos_fijos_oficina NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    egresos_totales NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    ganancia_neta NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    margen_rentabilidad NUMERIC(6,2) NOT NULL DEFAULT 0.00,
+    estado VARCHAR(30) NOT NULL DEFAULT 'Borrador',
+    generado_por VARCHAR(100),
+    aprobado_por VARCHAR(100),
+    fecha_aprobacion TIMESTAMP,
+    notas TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rentabilidad_liquidaciones_detalle (
+    id SERIAL PRIMARY KEY,
+    liquidacion_id INT NOT NULL REFERENCES rentabilidad_liquidaciones(id) ON DELETE CASCADE,
+    personal_id INT REFERENCES trabajadores(id) ON DELETE SET NULL,
+    nombre_personal VARCHAR(150) NOT NULL,
+    perfil_nombre VARCHAR(100) NOT NULL,
+    altas_individuales INT NOT NULL DEFAULT 0,
+    sueldo_base NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    factor_comision NUMERIC(6,3) NOT NULL DEFAULT 0.000,
+    comision_calculada NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    bono_fijo NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    total_comisiones NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    pago_planilla_bruto NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    gastos_adicionales NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    total_a_pagar NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+    estado_pago VARCHAR(30) NOT NULL DEFAULT 'Pendiente',
+    fecha_pago TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rentabilidad_simulaciones (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    descripcion TEXT,
+    usuario_id INT REFERENCES users(id),
+    parametros_json JSONB NOT NULL,
+    resultados_json JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rentabilidad_historial_cambios (
+    id SERIAL PRIMARY KEY,
+    tipo_entidad VARCHAR(50) NOT NULL,
+    descripcion TEXT NOT NULL,
+    valores_anteriores JSONB,
+    valores_nuevos JSONB,
+    usuario VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed Data (de Rentabilidad_Dealer_ON_Negocios_v10.xlsx)
+INSERT INTO rentabilidad_config_global (clave, valor, descripcion) VALUES
+('arpu_promedio', '168.64', 'ARPU promedio sin IGV (por defecto S/ 199 / 1.18)'),
+('divisor_bonos', '4', 'Cantidad de altas requeridas para desbloquear 1 bono del Dealer'),
+('bono_supervisor_matriz_15', '1500.00', 'Bono de supervisor matriz a partir de 15 altas totales'),
+('bono_supervisor_matriz_20', '3000.00', 'Bono de supervisor matriz a partir de 20 altas totales'),
+('gastos_fijos_oficina', '500.00', 'Gastos fijos operativos mensuales base (alquiler, servicios, internet)')
+ON CONFLICT (clave) DO NOTHING;
+
+INSERT INTO rentabilidad_dealer_parametros (ventas_minimas, factor_dealer, bono_unitario) VALUES
+(0, 0.000, 0.00),
+(1, 2.500, 1100.00),
+(7, 3.000, 1100.00),
+(10, 3.500, 1350.00),
+(15, 3.800, 1350.00),
+(20, 4.000, 1500.00)
+ON CONFLICT (ventas_minimas) DO NOTHING;
+
+INSERT INTO rentabilidad_perfiles (id, nombre, sueldo_base, gastos_adicionales_defecto, descripcion, activo, orden) VALUES
+(1, 'Full Time', 1500.00, 50.00, 'Vendedor a tiempo completo con metas comerciales estándar', TRUE, 1),
+(2, 'Medio Tiempo', 800.00, 50.00, 'Vendedor part-time enfocado en turnos reducidos', TRUE, 2),
+(3, 'Freelance', 0.00, 0.00, 'Comisionista externo sin sueldo base, 100% variable', TRUE, 3),
+(4, 'Supervisor', 2000.00, 50.00, 'Líder de equipo comisiona sobre el volumen consolidado del grupo', TRUE, 4)
+ON CONFLICT (nombre) DO NOTHING;
+
+SELECT setval('rentabilidad_perfiles_id_seq', (SELECT COALESCE(MAX(id), 1) FROM rentabilidad_perfiles));
+
+
+-- Vinculación de Trabajadores con Módulo de Rentabilidad y Comisiones Dealer
+ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS perfil_comision_id INT REFERENCES rentabilidad_perfiles(id) ON DELETE SET NULL;
+ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS gastos_adicionales NUMERIC(12,2) DEFAULT 0.00;

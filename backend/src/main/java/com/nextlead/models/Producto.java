@@ -18,6 +18,22 @@ public class Producto {
     private Boolean activo;
     private List<ProductoComponente> components = new ArrayList<>();
 
+    // Telecom / ON Negocios Attributes
+    private String tipoProducto; // PLAN, SVA, CARGO_UNICO
+    private String subcategoria; // Redes, VPN e IPs, Equipamiento Wi-Fi, etc.
+    private Integer velocidadMbps; // 200, 300, 400, 600, 1000
+    private String equipamientoIncluido;
+    private String telefoniaIncluida;
+    private Boolean requiereRuc20;
+    private Boolean permiteHardphone;
+    private Double centralVirtualCosto;
+    private Boolean esMultisede;
+    private String preciosEscalonadosJson;
+    private String distritosPermitidos;
+    private String provinciasExcluidas;
+    private Integer limiteMaxCantidad;
+    private String documentosRequeridos;
+
     public Producto() {}
 
     public Long getId() { return id; }
@@ -58,4 +74,46 @@ public class Producto {
 
     public List<ProductoComponente> getComponents() { return components; }
     public void setComponents(List<ProductoComponente> components) { this.components = components; }
+
+    public String getTipoProducto() { return tipoProducto; }
+    public void setTipoProducto(String tipoProducto) { this.tipoProducto = tipoProducto; }
+
+    public String getSubcategoria() { return subcategoria; }
+    public void setSubcategoria(String subcategoria) { this.subcategoria = subcategoria; }
+
+    public Integer getVelocidadMbps() { return velocidadMbps; }
+    public void setVelocidadMbps(Integer velocidadMbps) { this.velocidadMbps = velocidadMbps; }
+
+    public String getEquipamientoIncluido() { return equipamientoIncluido; }
+    public void setEquipamientoIncluido(String equipamientoIncluido) { this.equipamientoIncluido = equipamientoIncluido; }
+
+    public String getTelefoniaIncluida() { return telefoniaIncluida; }
+    public void setTelefoniaIncluida(String telefoniaIncluida) { this.telefoniaIncluida = telefoniaIncluida; }
+
+    public Boolean getRequiereRuc20() { return requiereRuc20; }
+    public void setRequiereRuc20(Boolean requiereRuc20) { this.requiereRuc20 = requiereRuc20; }
+
+    public Boolean getPermiteHardphone() { return permiteHardphone; }
+    public void setPermiteHardphone(Boolean permiteHardphone) { this.permiteHardphone = permiteHardphone; }
+
+    public Double getCentralVirtualCosto() { return centralVirtualCosto; }
+    public void setCentralVirtualCosto(Double centralVirtualCosto) { this.centralVirtualCosto = centralVirtualCosto; }
+
+    public Boolean getEsMultisede() { return esMultisede; }
+    public void setEsMultisede(Boolean esMultisede) { this.esMultisede = esMultisede; }
+
+    public String getPreciosEscalonadosJson() { return preciosEscalonadosJson; }
+    public void setPreciosEscalonadosJson(String preciosEscalonadosJson) { this.preciosEscalonadosJson = preciosEscalonadosJson; }
+
+    public String getDistritosPermitidos() { return distritosPermitidos; }
+    public void setDistritosPermitidos(String distritosPermitidos) { this.distritosPermitidos = distritosPermitidos; }
+
+    public String getProvinciasExcluidas() { return provinciasExcluidas; }
+    public void setProvinciasExcluidas(String provinciasExcluidas) { this.provinciasExcluidas = provinciasExcluidas; }
+
+    public Integer getLimiteMaxCantidad() { return limiteMaxCantidad; }
+    public void setLimiteMaxCantidad(Integer limiteMaxCantidad) { this.limiteMaxCantidad = limiteMaxCantidad; }
+
+    public String getDocumentosRequeridos() { return documentosRequeridos; }
+    public void setDocumentosRequeridos(String documentosRequeridos) { this.documentosRequeridos = documentosRequeridos; }
 }

@@ -6,7 +6,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.util.*;
 
 @RestController
@@ -20,6 +22,15 @@ public class SalesController {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    private String getSetting(String key, String defaultVal) {
+        try {
+            String val = jdbcTemplate.queryForObject("SELECT value_text FROM system_settings WHERE key_name = ?", String.class, key);
+            return val != null ? val : defaultVal;
+        } catch (Exception e) {
+            return defaultVal;
+        }
+    }
+
     // ==========================================
     // 1. GET SALES LIST
     // ==========================================
@@ -30,12 +41,23 @@ public class SalesController {
                 "SELECT v.*, " +
                 "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as cliente_nombre_completo, " +
                 "       c.numero_documento, " +
+                "       o.titulo as oportunidad_titulo, " +
+                "       TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))) as vendedor_nombre, " +
+                "       t.rol_operativo as vendedor_cargo, " +
+                "       rp.nombre as vendedor_perfil, " +
+                "       COALESCE(v.equipo, t.equipo, 'Equipo Principal') as equipo_nombre, " +
+                "       COALESCE(v.supervisor_id, t.supervisor_id) as supervisor_id, " +
+                "       TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre, " +
                 "       (SELECT string_agg(CONCAT(vd.cantidad, 'x ', p.nombre), ', ') " +
                 "        FROM venta_detalles vd " +
                 "        JOIN productos p ON vd.producto_id = p.id " +
                 "        WHERE vd.venta_id = v.id) as productos_detalle " +
                 "FROM ventas v " +
                 "LEFT JOIN contacts c ON v.contacto_id = c.id " +
+                "LEFT JOIN oportunidades o ON v.oportunidad_id = o.id " +
+                "LEFT JOIN trabajadores t ON v.trabajador_id = t.id " +
+                "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
+                "LEFT JOIN trabajadores sup ON COALESCE(v.supervisor_id, t.supervisor_id) = sup.id " +
                 "ORDER BY v.fecha_venta DESC, v.id DESC";
             
             List<Map<String, Object>> sales = jdbcTemplate.queryForList(sql);
@@ -43,6 +65,46 @@ public class SalesController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("message", "Error al obtener lista de ventas: " + e.getMessage()));
+        }
+    }
+
+    // ==========================================
+    // 1.1 GET SALE BY ID WITH FULL DETAILS
+    // ==========================================
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getSaleById(@PathVariable Long id) {
+        try {
+            Map<String, Object> sale = jdbcTemplate.queryForMap(
+                "SELECT v.*, " +
+                "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as cliente_nombre_completo, " +
+                "       c.numero_documento, c.telefono_principal, c.email, " +
+                "       o.titulo as oportunidad_titulo, " +
+                "       TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))) as vendedor_nombre, " +
+                "       t.rol_operativo as vendedor_cargo, " +
+                "       rp.nombre as vendedor_perfil, " +
+                "       COALESCE(v.equipo, t.equipo, 'Equipo Principal') as equipo_nombre, " +
+                "       COALESCE(v.supervisor_id, t.supervisor_id) as supervisor_id, " +
+                "       TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre " +
+                "FROM ventas v " +
+                "LEFT JOIN contacts c ON v.contacto_id = c.id " +
+                "LEFT JOIN oportunidades o ON v.oportunidad_id = o.id " +
+                "LEFT JOIN trabajadores t ON v.trabajador_id = t.id " +
+                "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
+                "LEFT JOIN trabajadores sup ON COALESCE(v.supervisor_id, t.supervisor_id) = sup.id " +
+                "WHERE v.id = ?", id
+            );
+            List<Map<String, Object>> items = jdbcTemplate.queryForList(
+                "SELECT vd.*, p.nombre as producto_nombre, p.codigo, p.documentos_requeridos " +
+                "FROM venta_detalles vd " +
+                "JOIN productos p ON vd.producto_id = p.id " +
+                "WHERE vd.venta_id = ?", id
+            );
+            Map<String, Object> response = new HashMap<>(sale);
+            response.put("items", items);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("message", "Venta no encontrada: " + e.getMessage()));
         }
     }
 
@@ -245,6 +307,31 @@ public class SalesController {
                 defaultUserId = jdbcTemplate.queryForObject("SELECT id FROM users LIMIT 1", Integer.class);
             } catch (Exception ignored) {}
 
+            Integer trabajadorId = req.trabajador_id;
+            if (trabajadorId == null) {
+                try {
+                    trabajadorId = jdbcTemplate.queryForObject("SELECT id FROM trabajadores WHERE estado = 'Activo' ORDER BY id ASC LIMIT 1", Integer.class);
+                } catch (Exception ignored) {}
+            }
+
+            String workerEquipo = "Equipo Principal";
+            Integer workerSupervisorId = null;
+            if (trabajadorId != null) {
+                try {
+                    Map<String, Object> wInfo = jdbcTemplate.queryForMap(
+                        "SELECT equipo, supervisor_id FROM trabajadores WHERE id = ?", trabajadorId
+                    );
+                    if (wInfo.get("equipo") != null && !((String) wInfo.get("equipo")).trim().isEmpty()) {
+                        workerEquipo = (String) wInfo.get("equipo");
+                    }
+                    if (wInfo.get("supervisor_id") != null) {
+                        workerSupervisorId = ((Number) wInfo.get("supervisor_id")).intValue();
+                    }
+                } catch (Exception ignored) {}
+            }
+            String finalEquipo = (req.equipo != null && !req.equipo.trim().isEmpty()) ? req.equipo : workerEquipo;
+            Integer finalSupervisorId = req.supervisor_id != null ? req.supervisor_id : workerSupervisorId;
+
             if (isEdit) {
                 ventaId = req.id;
                 // Fetch old sale to restore old stock & bottle balance
@@ -270,8 +357,8 @@ public class SalesController {
                 // Update sale details
                 jdbcTemplate.update("DELETE FROM venta_detalles WHERE venta_id = ?", req.id);
                 jdbcTemplate.update(
-                    "UPDATE ventas SET contacto_id=?, fecha_venta=NOW(), subtotal=?, igv=?, total=?, estado=?, metodo_pago=?, estado_pago=?, monto_pagado=?, bidones_entregados=?, bidones_recogidos=?, notas=CONCAT(?, ' | ', COALESCE(notas,'')), direccion_entrega=? WHERE id=?",
-                    req.contacto_id, req.subtotal, req.igv, req.total, req.estado, req.metodo_pago, req.estado_pago, req.monto_pagado, req.bidones_entregados, req.bidones_recogidos, req.notas, req.direccion_entrega, req.id
+                    "UPDATE ventas SET contacto_id=?, trabajador_id=COALESCE(?, trabajador_id), equipo=?, supervisor_id=?, fecha_venta=NOW(), tipo_comprobante=?, subtotal=?, igv=?, total=?, estado=?, metodo_pago=?, estado_pago=?, monto_pagado=?, bidones_entregados=?, bidones_recogidos=?, notas=CONCAT(?, ' | ', COALESCE(notas,'')), direccion_entrega=? WHERE id=?",
+                    req.contacto_id, trabajadorId, finalEquipo, finalSupervisorId, (req.tipo_comprobante != null ? req.tipo_comprobante : "nota_venta"), req.subtotal, req.igv, req.total, req.estado, req.metodo_pago, req.estado_pago, req.monto_pagado, req.bidones_entregados, req.bidones_recogidos, req.notas, req.direccion_entrega, req.id
                 );
             } else {
                 // Generate sale number: V- + 6 characters
@@ -283,13 +370,14 @@ public class SalesController {
                 }
                 numeroVenta = "V-" + sb.toString();
 
-                String initialPaymentState = "completada".equalsIgnoreCase(req.estado) ? "pagado" : "pendiente";
-                double finalPaidAmount = "completada".equalsIgnoreCase(req.estado) ? req.total : 0.0;
+                String initialPaymentState = req.estado_pago != null ? req.estado_pago : "pendiente";
+                double finalPaidAmount = "pagado".equalsIgnoreCase(initialPaymentState) ? (req.monto_pagado != null && req.monto_pagado > 0 ? req.monto_pagado : req.total) : (req.monto_pagado != null ? req.monto_pagado : 0.0);
+                String initialInstallState = "completada".equalsIgnoreCase(req.estado) ? "completada" : "pendiente";
 
                 jdbcTemplate.update(
-                    "INSERT INTO ventas (contacto_id, usuario_id, numero_venta, fecha_venta, tipo_comprobante, subtotal, igv, total, monto_pagado, estado, estado_pago, metodo_pago, bidones_entregados, bidones_recogidos, notas, direccion_entrega) " +
-                    "VALUES (?, ?, ?, NOW(), 'nota_venta', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    req.contacto_id, defaultUserId, numeroVenta, req.subtotal, req.igv, req.total, finalPaidAmount, req.estado, initialPaymentState, req.metodo_pago, req.bidones_entregados, req.bidones_recogidos, req.notas, req.direccion_entrega
+                    "INSERT INTO ventas (contacto_id, trabajador_id, equipo, supervisor_id, usuario_id, numero_venta, fecha_venta, tipo_comprobante, subtotal, igv, total, monto_pagado, estado, estado_pago, metodo_pago, bidones_entregados, bidones_recogidos, notas, direccion_entrega, estado_instalacion) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    req.contacto_id, trabajadorId, finalEquipo, finalSupervisorId, defaultUserId, numeroVenta, (req.tipo_comprobante != null ? req.tipo_comprobante : "nota_venta"), req.subtotal, req.igv, req.total, finalPaidAmount, req.estado, initialPaymentState, req.metodo_pago, req.bidones_entregados, req.bidones_recogidos, req.notas, req.direccion_entrega, initialInstallState
                 );
                 ventaId = jdbcTemplate.queryForObject("SELECT lastval()", Long.class);
             }
@@ -316,12 +404,20 @@ public class SalesController {
 
             // Insert details and deduct stock
             for (SaleDetailRequest item : req.items) {
-                double sub = item.cantidad * item.precio_unitario;
-                jdbcTemplate.update(
-                    "INSERT INTO venta_detalles (venta_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)",
-                    ventaId, item.producto_id, item.cantidad, item.precio_unitario, sub
-                );
-                deductProductStock(item.producto_id, item.cantidad);
+                Integer prodId = item.producto_id;
+                if (prodId == null || prodId <= 0) {
+                    try {
+                        prodId = jdbcTemplate.queryForObject("SELECT id FROM productos ORDER BY id ASC LIMIT 1", Integer.class);
+                    } catch (Exception ignored) {}
+                }
+                if (prodId != null) {
+                    double sub = item.cantidad * item.precio_unitario;
+                    jdbcTemplate.update(
+                        "INSERT INTO venta_detalles (venta_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)",
+                        ventaId, prodId, item.cantidad, item.precio_unitario, sub
+                    );
+                    deductProductStock(prodId, item.cantidad);
+                }
             }
 
             // LOGISTICS AUTOMATION: Create a linked Pedido in "Entregado" stage if registering a new sale
@@ -351,11 +447,18 @@ public class SalesController {
 
                     // Insert order details
                     for (SaleDetailRequest item : req.items) {
-                        double sub = item.cantidad * item.precio_unitario;
-                        jdbcTemplate.update(
-                            "INSERT INTO pedido_detalles (pedido_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)",
-                            pedidoId, item.producto_id, item.cantidad, item.precio_unitario
-                        );
+                        Integer prodId = item.producto_id;
+                        if (prodId == null || prodId <= 0) {
+                            try {
+                                prodId = jdbcTemplate.queryForObject("SELECT id FROM productos ORDER BY id ASC LIMIT 1", Integer.class);
+                            } catch (Exception ignored) {}
+                        }
+                        if (prodId != null) {
+                            jdbcTemplate.update(
+                                "INSERT INTO pedido_detalles (pedido_id, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)",
+                                pedidoId, prodId, item.cantidad, item.precio_unitario
+                            );
+                        }
                     }
                 }
             }
@@ -365,11 +468,16 @@ public class SalesController {
                 // Delete previous cash logs for this sale to avoid duplicates
                 jdbcTemplate.update("DELETE FROM caja_movimientos WHERE referencia_id = ? AND tabla_referencia = 'ventas'", ventaId);
 
-                jdbcTemplate.update(
-                    "INSERT INTO caja_movimientos (tipo, categoria, monto, metodo_pago, referencia_id, tabla_referencia, fecha, notas, usuario_id) " +
-                    "VALUES ('Ingreso', 'Venta', ?, ?, ?, 'ventas', NOW(), ?, ?)",
-                    req.total, req.metodo_pago, ventaId, (isEdit ? "Actualización de Venta Directa #" : "Venta Directa #") + numeroVenta, defaultUserId
-                );
+                String tipoModelo = getSetting("negocio.tipo_modelo", "TELECOM");
+                if (!"TELECOM".equalsIgnoreCase(tipoModelo)) {
+                    // Negocio Regular: cobro directo al cliente por lo vendido
+                    // (En Telecomunicaciones NO se ingresa en automático; el ingreso de comisión se ingresa manualmente)
+                    jdbcTemplate.update(
+                        "INSERT INTO caja_movimientos (tipo, categoria, monto, metodo_pago, referencia_id, tabla_referencia, fecha, notas, usuario_id) " +
+                        "VALUES ('Ingreso', 'Venta', ?, ?, ?, 'ventas', NOW(), ?, ?)",
+                        req.total, req.metodo_pago, ventaId, (isEdit ? "Actualización de Venta Directa #" : "Venta Directa #") + numeroVenta, defaultUserId
+                    );
+                }
             } else {
                 jdbcTemplate.update("DELETE FROM caja_movimientos WHERE referencia_id = ? AND tabla_referencia = 'ventas'", ventaId);
             }
@@ -395,7 +503,11 @@ public class SalesController {
 
             boolean alreadyDelivered = "completada".equalsIgnoreCase((String) sale.get("estado"));
             boolean wasAlreadyPaid = "pagado".equalsIgnoreCase((String) sale.get("estado_pago"));
-            String nuevoEstado = (req.entrega_ok != null && req.entrega_ok) ? "completada" : "pendiente";
+            String currentEstado = (String) sale.get("estado");
+            String nuevoEstado = currentEstado != null ? currentEstado : "pendiente";
+            if (req.entrega_ok != null && req.entrega_ok) {
+                nuevoEstado = "completada";
+            }
 
             double finalPaid = req.monto_pagado;
             if ("pagado".equalsIgnoreCase(req.estado_pago)) {
@@ -431,6 +543,199 @@ public class SalesController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("message", "Error al validar la venta: " + e.getMessage()));
+        }
+    }
+
+    // ==========================================
+    // 6.1 UPDATE SALE STATUS (KANBAN DRAG & DROP)
+    // ==========================================
+    @PostMapping("/update-status")
+    @Transactional
+    public ResponseEntity<?> updateSaleStatus(@RequestBody Map<String, Object> req) {
+        try {
+            Long id = Long.valueOf(String.valueOf(req.get("id")));
+            String estado = (String) req.get("estado");
+            if (estado == null || estado.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "El estado es requerido."));
+            }
+            if ("completada".equalsIgnoreCase(estado)) {
+                jdbcTemplate.update("UPDATE ventas SET estado = 'completada', estado_instalacion = 'completada', fecha_instalacion = COALESCE(fecha_instalacion, NOW()) WHERE id = ?", id);
+            } else if ("cancelada".equalsIgnoreCase(estado)) {
+                jdbcTemplate.update("UPDATE ventas SET estado = 'cancelada' WHERE id = ?", id);
+            } else {
+                jdbcTemplate.update("UPDATE ventas SET estado = ? WHERE id = ?", estado.toLowerCase(), id);
+            }
+            return ResponseEntity.ok(Map.of("message", "Estado actualizado con éxito.", "estado", estado.toLowerCase()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al actualizar estado: " + e.getMessage()));
+        }
+    }
+
+    // ==========================================
+    // 6.1.1 UNLOCK SALE (DESBLOQUEAR VENTA CERRADA/ANULADA)
+    // ==========================================
+    @PostMapping("/unlock")
+    @Transactional
+    public ResponseEntity<?> unlockSale(@RequestBody Map<String, Object> req) {
+        try {
+            Long id = Long.valueOf(String.valueOf(req.get("id")));
+            String targetEstado = req.get("target_estado") != null ? (String) req.get("target_estado") : "en_proceso";
+            jdbcTemplate.update("UPDATE ventas SET estado = ?, estado_instalacion = 'pendiente' WHERE id = ?", targetEstado.toLowerCase(), id);
+            return ResponseEntity.ok(Map.of("message", "Venta desbloqueada con éxito y trasladada a " + targetEstado, "estado", targetEstado.toLowerCase()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al desbloquear venta: " + e.getMessage()));
+        }
+    }
+
+    // ==========================================
+    // 6.2 UPLOAD INSTALLATION DOCUMENT
+    // ==========================================
+    @PostMapping("/upload-doc")
+    public ResponseEntity<?> uploadInstallationDoc(@RequestParam("file") MultipartFile file) {
+        try {
+            if (file.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "El archivo está vacío."));
+            }
+
+            String uploadDir = "/app/uploads/";
+            File dir = new File(uploadDir);
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+
+            String originalFilename = file.getOriginalFilename();
+            String cleanName = originalFilename != null ? originalFilename.replaceAll("[^a-zA-Z0-9.-]", "_") : "doc";
+            String filename = "doc_instalacion_" + System.currentTimeMillis() + "_" + cleanName;
+            File targetFile = new File(dir, filename);
+            file.transferTo(targetFile);
+
+            String localPath = "/uploads/" + filename;
+            return ResponseEntity.ok(Map.of(
+                "url", localPath,
+                "filename", originalFilename != null ? originalFilename : filename,
+                "size", file.getSize(),
+                "message", "Archivo subido con éxito."
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al subir documento: " + e.getMessage()));
+        }
+    }
+
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    private String safeJsonString(Object obj) {
+        if (obj == null) return "[]";
+        if (obj instanceof String) {
+            String s = ((String) obj).trim();
+            return s.isEmpty() ? "[]" : s;
+        }
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+
+    // ==========================================
+    // 6.3 SAVE INSTALLATION DOCUMENTATION
+    // ==========================================
+    @PostMapping("/save-docs")
+    @Transactional
+    public ResponseEntity<?> saveInstallationDocs(@RequestBody Map<String, Object> req) {
+        try {
+            Long id = Long.valueOf(String.valueOf(req.get("id")));
+            String documentos = safeJsonString(req.get("documentos"));
+            String estadoInstalacion = req.get("estado_instalacion") != null ? String.valueOf(req.get("estado_instalacion")) : "completada";
+            String tecnico = req.get("tecnico_instalador") != null ? String.valueOf(req.get("tecnico_instalador")) : null;
+            String notasInstalacion = req.get("notas_instalacion") != null ? String.valueOf(req.get("notas_instalacion")) : null;
+            boolean completarVenta = Boolean.parseBoolean(String.valueOf(req.get("completar_venta")));
+
+            if (completarVenta) {
+                jdbcTemplate.update(
+                    "UPDATE ventas SET documentos_instalacion = ?, estado_instalacion = ?, tecnico_instalador = ?, notas_instalacion = ?, estado = 'completada', fecha_instalacion = NOW() WHERE id = ?",
+                    documentos, estadoInstalacion, tecnico, notasInstalacion, id
+                );
+            } else {
+                jdbcTemplate.update(
+                    "UPDATE ventas SET documentos_instalacion = ?, estado_instalacion = ?, tecnico_instalador = ?, notas_instalacion = ? WHERE id = ?",
+                    documentos, estadoInstalacion, tecnico, notasInstalacion, id
+                );
+            }
+
+            return ResponseEntity.ok(Map.of(
+                "message", completarVenta ? "Documentación guardada e instalación completada con éxito." : "Documentación guardada con éxito.",
+                "estado_instalacion", estadoInstalacion
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al guardar documentación: " + e.getMessage()));
+        }
+    }
+
+    // ==========================================
+    // 6.4 APPROVE / VALIDATE DOCUMENTATION
+    // ==========================================
+    @PostMapping("/approve-docs")
+    @Transactional
+    public ResponseEntity<?> approveDocumentation(@RequestBody Map<String, Object> req) {
+        try {
+            Long id = Long.valueOf(String.valueOf(req.get("id")));
+            String estadoAprobacion = req.get("estado_aprobacion") != null ? String.valueOf(req.get("estado_aprobacion")) : "aprobada";
+            String aprobadoPor = req.get("aprobado_por") != null ? String.valueOf(req.get("aprobado_por")) : "Administrador";
+            String nuevoEstado = req.get("nuevo_estado") != null ? String.valueOf(req.get("nuevo_estado")) : "en_proceso";
+
+            jdbcTemplate.update(
+                "UPDATE ventas SET estado_aprobacion = ?, aprobado_por = ?, fecha_aprobacion = NOW(), estado = ? WHERE id = ?",
+                estadoAprobacion, aprobadoPor, nuevoEstado, id
+            );
+
+            return ResponseEntity.ok(Map.of(
+                "message", "aprobada".equalsIgnoreCase(estadoAprobacion) 
+                    ? "Documentación aprobada con éxito. Venta movida a Programación / Instalación." 
+                    : "Estado de documentación actualizado.",
+                "estado_aprobacion", estadoAprobacion,
+                "estado", nuevoEstado
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al aprobar documentación: " + e.getMessage()));
+        }
+    }
+
+    // ==========================================
+    // 6.5 UPDATE 4 INVOICES TRACKING
+    // ==========================================
+    @PostMapping("/update-invoices")
+    @Transactional
+    public ResponseEntity<?> updateInvoicesTracking(@RequestBody Map<String, Object> req) {
+        try {
+            Long id = Long.valueOf(String.valueOf(req.get("id")));
+            String facturasJson = safeJsonString(req.get("facturas_seguimiento"));
+            
+            // Check if 1st invoice is marked as paid
+            Boolean f1Paid = req.get("f1_pagada") != null ? Boolean.parseBoolean(String.valueOf(req.get("f1_pagada"))) : null;
+            if (Boolean.TRUE.equals(f1Paid)) {
+                jdbcTemplate.update(
+                    "UPDATE ventas SET facturas_seguimiento = ?, estado_pago = 'pagado' WHERE id = ?",
+                    facturasJson, id
+                );
+            } else {
+                jdbcTemplate.update(
+                    "UPDATE ventas SET facturas_seguimiento = ? WHERE id = ?",
+                    facturasJson, id
+                );
+            }
+
+            return ResponseEntity.ok(Map.of(
+                "message", "Seguimiento de facturas actualizado con éxito.",
+                "facturas_seguimiento", facturasJson
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al actualizar facturas: " + e.getMessage()));
         }
     }
 
@@ -535,29 +840,32 @@ public class SalesController {
             updateCustomerBottleBalance(id, false);
         }
 
-        // 2. Finance Cash Flow Sync
-        Double yaRegistrado = jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(CASE WHEN tipo = 'Ingreso' THEN monto ELSE -monto END), 0.0) " +
-            "FROM caja_movimientos WHERE referencia_id = ? AND tabla_referencia = 'ventas'",
-            Double.class, id
-        );
+        // 2. Finance Cash Flow Sync (Solo en Negocio Regular; en Telecomunicaciones las comisiones se registran manualmente)
+        String tipoModelo = getSetting("negocio.tipo_modelo", "TELECOM");
+        if (!"TELECOM".equalsIgnoreCase(tipoModelo)) {
+            Double yaRegistrado = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(CASE WHEN tipo = 'Ingreso' THEN monto ELSE -monto END), 0.0) " +
+                "FROM caja_movimientos WHERE referencia_id = ? AND tabla_referencia = 'ventas'",
+                Double.class, id
+            );
 
-        double diff = finalPaid - (yaRegistrado != null ? yaRegistrado : 0.0);
-        if (Math.abs(diff) > 0.01) {
-            if (diff > 0) {
-                jdbcTemplate.update(
-                    "INSERT INTO caja_movimientos (tipo, categoria, monto, metodo_pago, referencia_id, tabla_referencia, notas, usuario_id) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    "Ingreso", "Venta", diff, metodo != null ? metodo : "Efectivo", id, "ventas",
-                    "Abono a Venta #" + id + ("parcial".equalsIgnoreCase(estadoPago) ? " (Pago Parcial)" : " (Pago Completo)"), userId
-                );
-            } else {
-                jdbcTemplate.update(
-                    "INSERT INTO caja_movimientos (tipo, categoria, monto, metodo_pago, referencia_id, tabla_referencia, notas, usuario_id) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    "Egreso", "Anulación/Corrección", Math.abs(diff), metodo != null ? metodo : "Efectivo", id, "ventas",
-                    "Corrección de monto en Venta #" + id, userId
-                );
+            double diff = finalPaid - (yaRegistrado != null ? yaRegistrado : 0.0);
+            if (Math.abs(diff) > 0.01) {
+                if (diff > 0) {
+                    jdbcTemplate.update(
+                        "INSERT INTO caja_movimientos (tipo, categoria, monto, metodo_pago, referencia_id, tabla_referencia, notas, usuario_id) " +
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        "Ingreso", "Venta", diff, metodo != null ? metodo : "Efectivo", id, "ventas",
+                        "Abono a Venta #" + id + ("parcial".equalsIgnoreCase(estadoPago) ? " (Pago Parcial)" : " (Pago Completo)"), userId
+                    );
+                } else {
+                    jdbcTemplate.update(
+                        "INSERT INTO caja_movimientos (tipo, categoria, monto, metodo_pago, referencia_id, tabla_referencia, notas, usuario_id) " +
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        "Egreso", "Anulación/Corrección", Math.abs(diff), metodo != null ? metodo : "Efectivo", id, "ventas",
+                        "Corrección de monto en Venta #" + id, userId
+                    );
+                }
             }
         }
     }
@@ -652,7 +960,11 @@ public class SalesController {
     public static class SaveSaleRequest {
         public Long id;
         public String numero_venta;
+        public String tipo_comprobante = "nota_venta";
         public Long contacto_id;
+        public Integer trabajador_id;
+        public String equipo;
+        public Integer supervisor_id;
         public String estado = "pendiente";
         public String metodo_pago = "Efectivo";
         public String estado_pago = "pendiente";

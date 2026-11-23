@@ -16,11 +16,13 @@ public class UsersController {
 
     private final UserDao userDao;
     private final PasswordEncoder passwordEncoder;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Autowired
-    public UsersController(UserDao userDao, PasswordEncoder passwordEncoder) {
+    public UsersController(UserDao userDao, PasswordEncoder passwordEncoder, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.userDao = userDao;
         this.passwordEncoder = passwordEncoder;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @GetMapping
@@ -59,6 +61,14 @@ public class UsersController {
         // Guardar en base de datos
         userDao.save(newUser);
         
+        // Buscar el usuario recién creado para retornar su id asignado
+        java.util.Optional<User> createdOpt = userDao.findByUsername(newUser.getUsername());
+        if (createdOpt.isPresent()) {
+            User created = createdOpt.get();
+            created.setPassword(null);
+            return new ResponseEntity<>(created, HttpStatus.CREATED);
+        }
+
         // Ocultar la contraseña en la respuesta
         newUser.setPassword(null);
         return new ResponseEntity<>(newUser, HttpStatus.CREATED);

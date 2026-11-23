@@ -40,6 +40,34 @@ public class ContactController {
             .orElse(ResponseEntity.notFound().build());
     }
 
+    // GET /api/contacts/check-document?numero={numero}&excludeId={id} — Comprobar si un número de documento ya está registrado
+    @GetMapping("/check-document")
+    public ResponseEntity<?> checkDocument(
+            @RequestParam String numero,
+            @RequestParam(required = false) Long excludeId) {
+        if (numero == null || numero.isBlank()) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("message", "Número de documento requerido."));
+        }
+        Optional<Contact> existingOpt = contactDao.findByNumeroDocumento(numero.trim());
+        if (existingOpt.isPresent()) {
+            Contact existing = existingOpt.get();
+            if (excludeId == null || !existing.getId().equals(excludeId)) {
+                String nombre = "EMPRESA".equals(existing.getTipoPersona()) 
+                    ? existing.getRazonSocial() 
+                    : existing.getNombreDisplay();
+                return ResponseEntity.ok(java.util.Map.of(
+                    "exists", true,
+                    "id", existing.getId(),
+                    "tipoPersona", existing.getTipoPersona(),
+                    "tipoDocumento", existing.getTipoDocumento(),
+                    "numeroDocumento", existing.getNumeroDocumento(),
+                    "nombre", nombre != null ? nombre.trim() : ""
+                ));
+            }
+        }
+        return ResponseEntity.ok(java.util.Map.of("exists", false));
+    }
+
     // GET /api/contacts/empresas — Solo Empresas (para selector en formulario)
     @GetMapping("/empresas")
     public ResponseEntity<List<Contact>> getEmpresas() {
@@ -50,13 +78,45 @@ public class ContactController {
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         Optional<Contact> opt = contactDao.findById(id);
-        return opt.map(ResponseEntity::ok)
-                  .orElse(ResponseEntity.notFound().build());
+        if (opt.isPresent()) {
+            opt.get().setDirecciones(contactDao.findAddressesByContactId(id));
+            return ResponseEntity.ok(opt.get());
+        }
+        return ResponseEntity.notFound().build();
     }
 
     // GET /api/contacts/{id}/addresses — Direcciones con Ubigeo resuelto
     @GetMapping("/{id}/addresses")
     public ResponseEntity<List<Direccion>> getAddresses(@PathVariable Long id) {
+        return ResponseEntity.ok(contactDao.findAddressesByContactId(id));
+    }
+
+    // POST /api/contacts/{id}/addresses — Agregar una nueva dirección directamente
+    @PostMapping("/{id}/addresses")
+    public ResponseEntity<?> addAddress(@PathVariable Long id, @RequestBody DireccionRequest dr) {
+        Optional<Contact> opt = contactDao.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+
+        if (dr.direccionCompleta == null || dr.direccionCompleta.isBlank()) {
+            return ResponseEntity.badRequest().body("La dirección exacta es obligatoria.");
+        }
+
+        String ubi = (dr.codigoUbigeo != null && !dr.codigoUbigeo.isBlank()) ? dr.codigoUbigeo : "150101";
+        String nombre = (dr.nombreUbicacion != null && !dr.nombreUbicacion.isBlank()) ? dr.nombreUbicacion : "Sede Principal";
+
+        String sql = """
+            INSERT INTO direcciones (id_contacto, nombre_ubicacion, codigo_ubigeo, direccion_completa, referencia, latitud, longitud)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """;
+        jdbcTemplate.update(sql, id, nombre, ubi, dr.direccionCompleta.trim(), dr.referencia, dr.latitud, dr.longitud);
+
+        return ResponseEntity.ok(contactDao.findAddressesByContactId(id));
+    }
+
+    // DELETE /api/contacts/{id}/addresses/{addrId} — Eliminar una dirección
+    @DeleteMapping("/{id}/addresses/{addrId}")
+    public ResponseEntity<?> deleteAddress(@PathVariable Long id, @PathVariable Long addrId) {
+        jdbcTemplate.update("DELETE FROM direcciones WHERE id_direccion = ? AND id_contacto = ?", addrId, id);
         return ResponseEntity.ok(contactDao.findAddressesByContactId(id));
     }
 
@@ -89,6 +149,61 @@ public class ContactController {
         return ResponseEntity.ok(contactDao.findPersonasByEmpresaId(id));
     }
 
+    // POST /api/contacts/{id}/personas — Agregar una persona de contacto a esta empresa
+    @PostMapping("/{id}/personas")
+    public ResponseEntity<?> addPersonaToEmpresa(@PathVariable Long id, @RequestBody ContactRequest req) {
+        Optional<Contact> empOpt = contactDao.findById(id);
+        if (empOpt.isEmpty()) return ResponseEntity.notFound().build();
+        if (!"EMPRESA".equals(empOpt.get().getTipoPersona())) {
+            return ResponseEntity.badRequest().body("Solo se pueden agregar personas vinculadas a contactos de tipo EMPRESA.");
+        }
+        req.tipoPersona = "NATURAL";
+        req.empresaId = id;
+        if (req.tipoDocumento == null || req.tipoDocumento.isBlank()) req.tipoDocumento = "DNI";
+        return create(req);
+    }
+
+    // GET /api/contacts/{id}/oportunidades — Oportunidades CRM vinculadas al contacto o a su empresa
+    @GetMapping("/{id}/oportunidades")
+    public ResponseEntity<?> getOportunidadesByContactId(@PathVariable Long id) {
+        try {
+            String sql = """
+                SELECT o.id, o.titulo, o.valor, o.prioridad, o.etiquetas, o.created_at,
+                       o.notas, o.productos_json,
+                       kc.nombre as etapa_nombre, kc.es_ganada, kc.es_perdida,
+                       CONCAT(u.first_name, ' ', u.last_name) as vendedor_nombre
+                FROM oportunidades o
+                LEFT JOIN kanban_columnas kc ON o.etapa_id = kc.id
+                LEFT JOIN users u ON o.usuario_id = u.id
+                WHERE o.contacto_id IN (SELECT id FROM contacts WHERE id = ? OR empresa_id = ? OR id = (SELECT empresa_id FROM contacts WHERE id = ?))
+                ORDER BY o.created_at DESC
+            """;
+            return ResponseEntity.ok(jdbcTemplate.queryForList(sql, id, id, id));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(java.util.Map.of("message", "Error al obtener oportunidades: " + e.getMessage()));
+        }
+    }
+
+    // GET /api/contacts/{id}/ventas — Ventas comerciales del contacto
+    @GetMapping("/{id}/ventas")
+    public ResponseEntity<?> getVentasByContactId(@PathVariable Long id) {
+        try {
+            String sql = """
+                SELECT v.id, v.numero_venta as numero, v.fecha_venta as fecha, v.total,
+                       v.subtotal, v.igv, v.monto_pagado, v.estado_pago, v.estado as estado_entrega,
+                       v.metodo_pago, v.tipo_comprobante, v.direccion_entrega, v.bidones_entregados, v.bidones_recogidos
+                FROM ventas v
+                WHERE v.contacto_id IN (SELECT id FROM contacts WHERE id = ? OR empresa_id = ? OR id = (SELECT empresa_id FROM contacts WHERE id = ?))
+                ORDER BY v.fecha_venta DESC
+            """;
+            return ResponseEntity.ok(jdbcTemplate.queryForList(sql, id, id, id));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(java.util.Map.of("message", "Error al obtener ventas: " + e.getMessage()));
+        }
+    }
+
     // POST /api/contacts — Crear contacto con validaciones
     @PostMapping
     public ResponseEntity<?> create(@RequestBody ContactRequest req) {
@@ -113,18 +228,27 @@ public class ContactController {
 
         // Validación de número de documento
         if (req.numeroDocumento != null) {
+            String numDocTrim = req.numeroDocumento.trim();
             if ("DNI".equals(req.tipoDocumento)) {
-                if (!req.numeroDocumento.matches("^[0-9]{8}$")) {
+                if (!numDocTrim.matches("^[0-9]{8}$")) {
                     errors.add("El DNI debe tener exactamente 8 dígitos numéricos.");
                 }
             } else if ("RUC".equals(req.tipoDocumento)) {
-                if (!req.numeroDocumento.matches("^(10|20)[0-9]{9}$")) {
+                if (!numDocTrim.matches("^(10|20)[0-9]{9}$")) {
                     errors.add("El RUC debe tener 11 dígitos y comenzar con 10 o 20.");
                 }
             } else if ("CE".equals(req.tipoDocumento)) {
-                if (!req.numeroDocumento.matches("^[a-zA-Z0-9]{8,12}$")) {
+                if (!numDocTrim.matches("^[a-zA-Z0-9]{8,12}$")) {
                     errors.add("El CE debe tener entre 8 y 12 caracteres alfanuméricos.");
                 }
+            }
+
+            // Unicidad: verificar que no exista otro contacto con el mismo documento
+            Optional<Contact> existingDoc = contactDao.findByNumeroDocumento(numDocTrim);
+            if (existingDoc.isPresent()) {
+                Contact c = existingDoc.get();
+                String nombreExistente = "EMPRESA".equals(c.getTipoPersona()) ? c.getRazonSocial() : c.getNombreDisplay();
+                errors.add("El número de documento " + numDocTrim + " ya está registrado y pertenece a: " + (nombreExistente != null ? nombreExistente.trim() : "otro contacto") + " (ID #" + c.getId() + ").");
             }
         } else {
             errors.add("El número de documento es obligatorio.");
@@ -199,8 +323,16 @@ public class ContactController {
             }
         }
 
-        Contact saved = contactDao.save(contact);
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        try {
+            Contact saved = contactDao.save(contact);
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        } catch (org.springframework.dao.DataIntegrityViolationException dive) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(List.of("No se pudo registrar el contacto: el número de documento ya existe en el sistema."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(List.of("Error al registrar el contacto: " + e.getMessage()));
+        }
     }
 
     // PUT /api/contacts/{id} — Actualizar contacto con validaciones
@@ -230,18 +362,27 @@ public class ContactController {
 
         // Validación de número de documento
         if (req.numeroDocumento != null) {
+            String numDocTrim = req.numeroDocumento.trim();
             if ("DNI".equals(req.tipoDocumento)) {
-                if (!req.numeroDocumento.matches("^[0-9]{8}$")) {
+                if (!numDocTrim.matches("^[0-9]{8}$")) {
                     errors.add("El DNI debe tener exactamente 8 dígitos numéricos.");
                 }
             } else if ("RUC".equals(req.tipoDocumento)) {
-                if (!req.numeroDocumento.matches("^(10|20)[0-9]{9}$")) {
+                if (!numDocTrim.matches("^(10|20)[0-9]{9}$")) {
                     errors.add("El RUC debe tener 11 dígitos y comenzar con 10 o 20.");
                 }
             } else if ("CE".equals(req.tipoDocumento)) {
-                if (!req.numeroDocumento.matches("^[a-zA-Z0-9]{8,12}$")) {
+                if (!numDocTrim.matches("^[a-zA-Z0-9]{8,12}$")) {
                     errors.add("El CE debe tener entre 8 y 12 caracteres alfanuméricos.");
                 }
+            }
+
+            // Unicidad: verificar que no pertenezca a otro contacto
+            Optional<Contact> existingDoc = contactDao.findByNumeroDocumento(numDocTrim);
+            if (existingDoc.isPresent() && !existingDoc.get().getId().equals(id)) {
+                Contact c = existingDoc.get();
+                String nombreExistente = "EMPRESA".equals(c.getTipoPersona()) ? c.getRazonSocial() : c.getNombreDisplay();
+                errors.add("El número de documento " + numDocTrim + " ya pertenece a otro contacto registrado: " + (nombreExistente != null ? nombreExistente.trim() : "ID #" + c.getId()) + ".");
             }
         } else {
             errors.add("El número de documento es obligatorio.");
@@ -316,8 +457,16 @@ public class ContactController {
             }
         }
 
-        contactDao.update(contact);
-        return ResponseEntity.ok(contact);
+        try {
+            contactDao.update(contact);
+            return ResponseEntity.ok(contact);
+        } catch (org.springframework.dao.DataIntegrityViolationException dive) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(List.of("No se pudo actualizar el contacto: el número de documento ya pertenece a otro registro."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(List.of("Error al actualizar el contacto: " + e.getMessage()));
+        }
     }
 
     // PUT /api/contacts/{id}/star — Alternar favorito
@@ -356,8 +505,16 @@ public class ContactController {
             }
         }
         contact.setEmpresaId(empresaId);
-        contactDao.update(contact);
-        return ResponseEntity.ok(contact);
+        try {
+            contactDao.update(contact);
+            return ResponseEntity.ok(contact);
+        } catch (org.springframework.dao.DataIntegrityViolationException dive) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(List.of("No se pudo actualizar el contacto: el número de documento ya pertenece a otro registro."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(List.of("Error al actualizar el contacto: " + e.getMessage()));
+        }
     }
 
     // DELETE /api/contacts/{id} — Eliminar contacto (cascada en direcciones)
@@ -426,6 +583,37 @@ public class ContactController {
             }
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error al resolver URL: " + e.getMessage());
+        }
+    }
+
+    // GET /api/contacts/geocode?q={address} — Geocodificar dirección en Perú
+    @GetMapping("/geocode")
+    public ResponseEntity<?> geocodeAddress(@RequestParam String q) {
+        try {
+            String url = "https://nominatim.openstreetmap.org/search?format=json&q=" +
+                java.net.URLEncoder.encode(q, java.nio.charset.StandardCharsets.UTF_8) +
+                "&countrycodes=pe&limit=1";
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(url))
+                .header("User-Agent", "NextLeadCRM/1.0 (contactos@nextlead.pe)")
+                .GET()
+                .build();
+            java.net.http.HttpResponse<String> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                java.util.List<?> list = mapper.readValue(resp.body(), java.util.List.class);
+                if (!list.isEmpty() && list.get(0) instanceof java.util.Map) {
+                    java.util.Map<?, ?> item = (java.util.Map<?, ?>) list.get(0);
+                    Double lat = Double.parseDouble(item.get("lat").toString());
+                    Double lng = Double.parseDouble(item.get("lon").toString());
+                    String displayName = item.get("display_name") != null ? item.get("display_name").toString() : "";
+                    return ResponseEntity.ok(java.util.Map.of("found", true, "lat", lat, "lng", lng, "displayName", displayName));
+                }
+            }
+            return ResponseEntity.ok(java.util.Map.of("found", false));
+        } catch (Exception e) {
+            return ResponseEntity.ok(java.util.Map.of("found", false, "error", e.getMessage()));
         }
     }
 

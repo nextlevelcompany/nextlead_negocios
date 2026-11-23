@@ -50,7 +50,12 @@ public class PayrollController {
     @GetMapping("/staff")
     public ResponseEntity<?> getStaff(@RequestParam(value = "estado", required = false) String estado) {
         try {
-            String sql = "SELECT t.*, a.nombre as afp_nombre FROM trabajadores t LEFT JOIN afp_maestra a ON t.afp_id = a.id";
+            String sql = "SELECT t.*, a.nombre as afp_nombre, p.nombre as perfil_nombre, " +
+                         "TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre " +
+                         "FROM trabajadores t " +
+                         "LEFT JOIN afp_maestra a ON t.afp_id = a.id " +
+                         "LEFT JOIN rentabilidad_perfiles p ON t.perfil_comision_id = p.id " +
+                         "LEFT JOIN trabajadores sup ON t.supervisor_id = sup.id";
             List<Map<String, Object>> list;
             if (estado != null && !estado.trim().isEmpty() && !"all".equalsIgnoreCase(estado)) {
                 sql += " WHERE t.estado = ? ORDER BY t.nombre ASC";
@@ -103,12 +108,13 @@ public class PayrollController {
                     "paga_ley = ?, regimen_pension = ?, afp_id = ?, tipo_comision_afp = ?, paga_comision = ?, " +
                     "monto_comision_bidon = ?, vehiculo_placa = ?, vehiculo_marca = ?, vehiculo_modelo = ?, " +
                     "vehiculo_capacidad = ?, linea_movil = ?, cuenta_bancaria = ?, banco_nombre = ?, estado = ?, " +
-                    "fecha_ingreso = ? WHERE id = ?",
+                    "fecha_ingreso = ?, perfil_comision_id = ?, gastos_adicionales = ?, equipo = ?, supervisor_id = ? WHERE id = ?",
                     req.usuario_id, req.nombre, req.apellido, req.dni, req.telefono, req.rol_operativo, req.sueldo_base,
                     req.frecuencia_pago, req.monto_tardanza, req.tiene_hijos, req.paga_ley, req.regimen_pension,
                     req.afp_id, req.tipo_comision_afp, req.paga_comision, req.monto_comision_bidon, req.vehiculo_placa,
                     req.vehiculo_marca, req.vehiculo_modelo, req.vehiculo_capacidad, req.linea_movil, req.cuenta_bancaria,
-                    req.banco_nombre, req.estado, dateIngreso, req.id
+                    req.banco_nombre, req.estado, dateIngreso, req.perfil_comision_id, req.gastos_adicionales,
+                    req.equipo != null ? req.equipo : "Equipo Principal", req.supervisor_id, req.id
                 );
                 workerId = req.id;
             } else {
@@ -116,15 +122,41 @@ public class PayrollController {
                     "INSERT INTO trabajadores (usuario_id, nombre, apellido, dni, telefono, rol_operativo, sueldo_base, " +
                     "frecuencia_pago, monto_tardanza, tiene_hijos, paga_ley, regimen_pension, afp_id, tipo_comision_afp, " +
                     "paga_comision, monto_comision_bidon, vehiculo_placa, vehiculo_marca, vehiculo_modelo, " +
-                    "vehiculo_capacidad, linea_movil, cuenta_bancaria, banco_nombre, estado, fecha_ingreso) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "vehiculo_capacidad, linea_movil, cuenta_bancaria, banco_nombre, estado, fecha_ingreso, perfil_comision_id, gastos_adicionales, equipo, supervisor_id) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     req.usuario_id, req.nombre, req.apellido, req.dni, req.telefono, req.rol_operativo, req.sueldo_base,
                     req.frecuencia_pago, req.monto_tardanza, req.tiene_hijos, req.paga_ley, req.regimen_pension,
                     req.afp_id, req.tipo_comision_afp, req.paga_comision, req.monto_comision_bidon, req.vehiculo_placa,
                     req.vehiculo_marca, req.vehiculo_modelo, req.vehiculo_capacidad, req.linea_movil, req.cuenta_bancaria,
-                    req.banco_nombre, req.estado, dateIngreso
+                    req.banco_nombre, req.estado, dateIngreso, req.perfil_comision_id, req.gastos_adicionales,
+                    req.equipo != null ? req.equipo : "Equipo Principal", req.supervisor_id
                 );
                 workerId = jdbcTemplate.queryForObject("SELECT lastval()", Long.class);
+            }
+
+            // Sync with rentabilidad_personal
+            if (req.paga_comision != null && req.paga_comision && req.perfil_comision_id != null) {
+                String fullName = (req.nombre + " " + req.apellido).trim();
+                double gAdic = req.gastos_adicionales != null ? req.gastos_adicionales : 50.0;
+                Integer rCount = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM rentabilidad_personal WHERE trabajador_id = ? OR documento_identidad = ?",
+                    Integer.class, workerId, req.dni
+                );
+                if (rCount != null && rCount > 0) {
+                    jdbcTemplate.update(
+                        "UPDATE rentabilidad_personal SET trabajador_id = ?, perfil_id = ?, nombre_completo = ?, " +
+                        "documento_identidad = ?, sueldo_base = ?, gastos_adicionales = ?, telefono = ?, estado = ? " +
+                        "WHERE trabajador_id = ? OR documento_identidad = ?",
+                        workerId, req.perfil_comision_id, fullName, req.dni, req.sueldo_base, gAdic, req.telefono, req.estado,
+                        workerId, req.dni
+                    );
+                } else {
+                    jdbcTemplate.update(
+                        "INSERT INTO rentabilidad_personal (trabajador_id, perfil_id, nombre_completo, documento_identidad, " +
+                        "sueldo_base, gastos_adicionales, telefono, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        workerId, req.perfil_comision_id, fullName, req.dni, req.sueldo_base, gAdic, req.telefono, req.estado
+                    );
+                }
             }
 
             // Sync with conductores table if they are a Repartidor
@@ -155,6 +187,8 @@ public class PayrollController {
     @Transactional
     public ResponseEntity<?> deleteStaff(@PathVariable Long id) {
         try {
+            // Sync delete in rentabilidad_personal if any row exists
+            jdbcTemplate.update("DELETE FROM rentabilidad_personal WHERE trabajador_id = ?", id);
             int rows = jdbcTemplate.update("DELETE FROM trabajadores WHERE id = ?", id);
             if (rows == 0) {
                 return ResponseEntity.notFound().build();
@@ -163,6 +197,194 @@ public class PayrollController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("message", "Error al eliminar colaborador: " + e.getMessage()));
+        }
+    }
+
+    // ==========================================
+    // 2.1. COMISIONES DE PERSONAL (TELECOM / DEALER)
+    // ==========================================
+    @GetMapping("/commissions")
+    public ResponseEntity<?> getPayrollCommissions(
+        @RequestParam(required = false) Integer mes,
+        @RequestParam(required = false) Integer anio
+    ) {
+        try {
+            LocalDate now = LocalDate.now();
+            int currentMes = (mes != null && mes >= 1 && mes <= 12) ? mes : now.getMonthValue();
+            int currentAnio = (anio != null && anio >= 2020) ? anio : now.getYear();
+
+            // Load global configs for ARPU
+            double arpu = 168.64;
+            try {
+                String arpuVal = jdbcTemplate.queryForObject(
+                    "SELECT valor FROM rentabilidad_config_global WHERE clave = 'arpu_promedio'",
+                    String.class
+                );
+                if (arpuVal != null) arpu = Double.parseDouble(arpuVal);
+            } catch (Exception ignored) {}
+
+            // Load active workers who have paga_comision = true or commission profile
+            List<Map<String, Object>> workers = jdbcTemplate.queryForList(
+                "SELECT t.*, p.nombre as perfil_nombre " +
+                "FROM trabajadores t " +
+                "LEFT JOIN rentabilidad_perfiles p ON t.perfil_comision_id = p.id " +
+                "WHERE t.estado = 'Activo' AND (t.paga_comision = true OR t.perfil_comision_id IS NOT NULL) " +
+                "ORDER BY t.nombre ASC"
+            );
+
+            // Fetch real installed sales count per user if linked
+            List<Map<String, Object>> salesByUserList = jdbcTemplate.queryForList(
+                "SELECT usuario_id, COUNT(*) as altas FROM ventas " +
+                "WHERE EXTRACT(MONTH FROM COALESCE(fecha_instalacion, fecha_venta)) = ? " +
+                "  AND EXTRACT(YEAR FROM COALESCE(fecha_instalacion, fecha_venta)) = ? " +
+                "  AND (LOWER(estado_instalacion) IN ('completada', 'instalada') OR fecha_instalacion IS NOT NULL) " +
+                "GROUP BY usuario_id",
+                currentMes, currentAnio
+            );
+            Map<Integer, Integer> salesByUser = new HashMap<>();
+            for (Map<String, Object> r : salesByUserList) {
+                if (r.get("usuario_id") != null) {
+                    salesByUser.put(((Number) r.get("usuario_id")).intValue(), ((Number) r.get("altas")).intValue());
+                }
+            }
+
+            Integer totalVentasReales = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ventas " +
+                "WHERE EXTRACT(MONTH FROM COALESCE(fecha_instalacion, fecha_venta)) = ? " +
+                "  AND EXTRACT(YEAR FROM COALESCE(fecha_instalacion, fecha_venta)) = ? " +
+                "  AND (LOWER(estado_instalacion) IN ('completada', 'instalada') OR fecha_instalacion IS NOT NULL)",
+                Integer.class, currentMes, currentAnio
+            );
+            if (totalVentasReales == null) totalVentasReales = 0;
+
+            int teamAltasTotal = 0;
+            List<Map<String, Object>> calculated = new ArrayList<>();
+
+            // 1. First pass for non-supervisors
+            for (Map<String, Object> w : workers) {
+                String rol = (String) w.get("rol_operativo");
+                String perfil = (String) w.get("perfil_nombre");
+                boolean isSupervisor = "Supervisor".equalsIgnoreCase(rol) || "Supervisor".equalsIgnoreCase(perfil);
+                if (isSupervisor) continue;
+
+                Long id = ((Number) w.get("id")).longValue();
+                Integer perfId = w.get("perfil_comision_id") != null ? ((Number) w.get("perfil_comision_id")).intValue() : 1;
+                double sueldoBase = ((Number) w.get("sueldo_base")).doubleValue();
+                double gastos = w.get("gastos_adicionales") != null ? ((Number) w.get("gastos_adicionales")).doubleValue() : 50.0;
+
+                Integer userAltas = w.get("usuario_id") != null ? salesByUser.get(((Number) w.get("usuario_id")).intValue()) : null;
+                int altas = userAltas != null ? userAltas : 0;
+                if (altas == 0 && totalVentasReales > 0) {
+                    altas = Math.max(1, totalVentasReales / Math.max(1, workers.size() - 1));
+                }
+                teamAltasTotal += altas;
+
+                // Scale lookup
+                List<Map<String, Object>> escalas = jdbcTemplate.queryForList(
+                    "SELECT * FROM rentabilidad_escalas_comisiones WHERE perfil_id = ? AND ventas_minimas <= ? " +
+                    "ORDER BY ventas_minimas DESC LIMIT 1",
+                    perfId, altas
+                );
+                double factor = 0.0;
+                double bono = 0.0;
+                String rangoNombre = "Sin Escala";
+                if (!escalas.isEmpty()) {
+                    Map<String, Object> esc = escalas.get(0);
+                    factor = ((Number) esc.get("factor_comision")).doubleValue();
+                    bono = ((Number) esc.get("bono_fijo")).doubleValue();
+                    rangoNombre = (String) esc.get("rango_nombre");
+                }
+
+                double comisionMonto = altas * arpu * factor;
+                double totalPagar = sueldoBase + comisionMonto + bono;
+
+                Map<String, Object> row = new HashMap<>(w);
+                row.put("nombre_completo", w.get("nombre") + " " + w.get("apellido"));
+                row.put("altas", altas);
+                row.put("arpu", arpu);
+                row.put("factor_comision", factor);
+                row.put("rango_nombre", rangoNombre);
+                row.put("comision_monto", Math.round(comisionMonto * 100.0) / 100.0);
+                row.put("bono_individual", bono);
+                row.put("gastos_adicionales", gastos);
+                row.put("total_a_pagar", Math.round(totalPagar * 100.0) / 100.0);
+                calculated.add(row);
+            }
+
+            // 2. Second pass for supervisors
+            for (Map<String, Object> w : workers) {
+                String rol = (String) w.get("rol_operativo");
+                String perfil = (String) w.get("perfil_nombre");
+                boolean isSupervisor = "Supervisor".equalsIgnoreCase(rol) || "Supervisor".equalsIgnoreCase(perfil);
+                if (!isSupervisor) continue;
+
+                Integer perfId = w.get("perfil_comision_id") != null ? ((Number) w.get("perfil_comision_id")).intValue() : 4;
+                double sueldoBase = ((Number) w.get("sueldo_base")).doubleValue();
+                double gastos = w.get("gastos_adicionales") != null ? ((Number) w.get("gastos_adicionales")).doubleValue() : 50.0;
+
+                int supervisorAltas = teamAltasTotal;
+
+                List<Map<String, Object>> escalas = jdbcTemplate.queryForList(
+                    "SELECT * FROM rentabilidad_escalas_comisiones WHERE perfil_id = ? AND ventas_minimas <= ? " +
+                    "ORDER BY ventas_minimas DESC LIMIT 1",
+                    perfId, supervisorAltas
+                );
+                double factor = 0.0;
+                double bono = 0.0;
+                String rangoNombre = "Sin Escala";
+                if (!escalas.isEmpty()) {
+                    Map<String, Object> esc = escalas.get(0);
+                    factor = ((Number) esc.get("factor_comision")).doubleValue();
+                    bono = ((Number) esc.get("bono_fijo")).doubleValue();
+                    rangoNombre = (String) esc.get("rango_nombre");
+                }
+
+                double comisionMonto = supervisorAltas * arpu * factor;
+                double totalPagar = sueldoBase + comisionMonto + bono;
+
+                Map<String, Object> row = new HashMap<>(w);
+                row.put("nombre_completo", w.get("nombre") + " " + w.get("apellido"));
+                row.put("altas", supervisorAltas);
+                row.put("arpu", arpu);
+                row.put("factor_comision", factor);
+                row.put("rango_nombre", rangoNombre);
+                row.put("comision_monto", Math.round(comisionMonto * 100.0) / 100.0);
+                row.put("bono_individual", bono);
+                row.put("gastos_adicionales", gastos);
+                row.put("total_a_pagar", Math.round(totalPagar * 100.0) / 100.0);
+                calculated.add(row);
+            }
+
+            // Totals
+            double sumComisiones = 0;
+            double sumBonos = 0;
+            double sumSueldos = 0;
+            double sumTotalPagar = 0;
+            for (Map<String, Object> c : calculated) {
+                sumComisiones += ((Number) c.get("comision_monto")).doubleValue();
+                sumBonos += ((Number) c.get("bono_individual")).doubleValue();
+                sumSueldos += ((Number) c.get("sueldo_base")).doubleValue();
+                sumTotalPagar += ((Number) c.get("total_a_pagar")).doubleValue();
+            }
+
+            return ResponseEntity.ok(Map.of(
+                "mes", currentMes,
+                "anio", currentAnio,
+                "arpu", arpu,
+                "teamAltasTotal", teamAltasTotal,
+                "indicadores", Map.of(
+                    "total_colaboradores", calculated.size(),
+                    "total_altas_equipo", teamAltasTotal,
+                    "total_comisiones", Math.round(sumComisiones * 100.0) / 100.0,
+                    "total_bonos", Math.round(sumBonos * 100.0) / 100.0,
+                    "total_sueldos_base", Math.round(sumSueldos * 100.0) / 100.0,
+                    "total_a_pagar", Math.round(sumTotalPagar * 100.0) / 100.0
+                ),
+                "detalles", calculated
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al calcular comisiones de personal: " + e.getMessage()));
         }
     }
 
@@ -786,6 +1008,8 @@ public class PayrollController {
         public String tipo_comision_afp = "Flujo";
         public Boolean paga_comision = false;
         public Double monto_comision_bidon = 0.0;
+        public Integer perfil_comision_id;
+        public Double gastos_adicionales = 0.0;
         public String vehiculo_placa;
         public String vehiculo_marca;
         public String vehiculo_modelo;
@@ -795,6 +1019,8 @@ public class PayrollController {
         public String banco_nombre;
         public String estado = "Activo";
         public String fecha_ingreso;
+        public String equipo = "Equipo Principal";
+        public Long supervisor_id;
     }
 
     public static class SaveAttendanceListRequest {

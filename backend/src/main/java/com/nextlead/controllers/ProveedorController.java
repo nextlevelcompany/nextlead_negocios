@@ -25,7 +25,10 @@ public class ProveedorController {
     public ResponseEntity<?> getAll() {
         try {
             List<Map<String, Object>> list = jdbcTemplate.queryForList(
-                "SELECT * FROM proveedores ORDER BY razon_social ASC"
+                "SELECT p.*, " +
+                "       COALESCE((SELECT COUNT(*) FROM compras WHERE proveedor_id = p.id), 0) as total_compras, " +
+                "       COALESCE((SELECT COUNT(*) FROM gastos WHERE proveedor_id = p.id), 0) as total_gastos " +
+                "FROM proveedores p ORDER BY p.razon_social ASC"
             );
             return ResponseEntity.ok(list);
         } catch (Exception e) {

@@ -19,6 +19,7 @@ import com.nextlead.wspai.model.AiKnowledgeBase;
 import com.nextlead.wspai.model.ShippingCoverage;
 import com.nextlead.wspai.model.WhatsAppMessage;
 
+import java.io.File;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,13 +36,19 @@ public class GeminiService {
     private final SettingsService settingsService;
     private final AiConfigDao aiConfigDao;
     private final WhatsAppMessageDao messageDao;
+    private final KmzParserService kmzParserService;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Autowired
-    public GeminiService(SettingsService settingsService, AiConfigDao aiConfigDao, WhatsAppMessageDao messageDao) {
+    public GeminiService(SettingsService settingsService, AiConfigDao aiConfigDao, 
+                         WhatsAppMessageDao messageDao, KmzParserService kmzParserService,
+                         org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
         this.settingsService = settingsService;
         this.aiConfigDao = aiConfigDao;
         this.messageDao = messageDao;
+        this.kmzParserService = kmzParserService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     private String getApiKey() {
@@ -101,7 +108,7 @@ public class GeminiService {
             StringBuilder contextBuilder = new StringBuilder();
 
             appendProductContext(contextBuilder, normalizedMessage, publicBaseUrl);
-            appendDeliveryContext(contextBuilder, normalizedMessage, wantsDelivery);
+            appendDeliveryContext(contextBuilder, userMessage, normalizedMessage, wantsDelivery, contact);
             appendFaqContext(contextBuilder, normalizedMessage, publicBaseUrl);
 
             StringBuilder customerContextBuilder = new StringBuilder("\nCLIENTE:\n");
@@ -214,9 +221,15 @@ public class GeminiService {
             Map<String, Object> generationConfig = new HashMap<>();
             generationConfig.put("temperature", 0.35);
             generationConfig.put("topP", 0.85);
-            generationConfig.put("maxOutputTokens", 4000);
+            generationConfig.put("maxOutputTokens", 2048);
             generationConfig.put("responseMimeType", "application/json");
             generationConfig.put("responseSchema", buildResponseSchema());
+
+            // Desactivar thinking mode en modelos como gemini-2.5-flash para prevenir loops de tokens y latencia
+            Map<String, Object> thinkingConfig = new HashMap<>();
+            thinkingConfig.put("thinkingBudget", 0);
+            generationConfig.put("thinkingConfig", thinkingConfig);
+
             body.put("generationConfig", generationConfig);
 
             List<Map<String, Object>> contentsList = buildConversationContents(userMessage, contact);
@@ -244,6 +257,9 @@ public class GeminiService {
                             JsonNode textNode = partsNode.get(0).get("text");
                             if (textNode != null) {
                                 String responseText = textNode.asText();
+                                if (responseText != null) {
+                                    responseText = responseText.replaceAll("(\r?\n){3,}", "\n\n");
+                                }
                                 logger.info("Decisión JSON de Gemini generada correctamente: {}", responseText);
                                 return responseText;
                             }
@@ -299,35 +315,129 @@ public class GeminiService {
         }
     }
 
-    private void appendDeliveryContext(StringBuilder contextBuilder, String normalizedMessage, boolean wantsDelivery) {
-        List<ShippingCoverage> allCoverage = aiConfigDao.getAllShippingCoverage().stream()
-                .filter(c -> c.getIsActive() != null && c.getIsActive())
-                .collect(Collectors.toList());
+    private void appendDeliveryContext(StringBuilder contextBuilder, String userMessage, String normalizedMessage, boolean wantsDelivery, Contact contact) {
+        // 1. Intentar obtener coordenadas GPS del mensaje actual u obtener del historial del contacto
+        Double lat = null;
+        Double lng = null;
 
-        List<ShippingCoverage> matchedCoverage = allCoverage.stream()
-                .filter(c -> containsAny(normalizedMessage, c.getDistrictName()) || 
-                             (c.getAliases() != null && containsAny(normalizedMessage, c.getAliases().split(","))))
-                .collect(Collectors.toList());
-
-        List<ShippingCoverage> coverageToSend = (wantsDelivery && !matchedCoverage.isEmpty()) 
-                ? matchedCoverage.stream().limit(10).collect(Collectors.toList())
-                : allCoverage.stream().limit(10).collect(Collectors.toList());
-
-        contextBuilder.append("\nCOBERTURA Y TARIFAS DE ENVÍO:\n");
-        if (coverageToSend.isEmpty()) {
-            contextBuilder.append("- No hay zonas activas configuradas.\n");
-            return;
-        }
-
-        for (ShippingCoverage cov : coverageToSend) {
-            contextBuilder.append("- distrito: ").append(nullSafe(cov.getDistrictName()))
-                    .append(" | envio: S/ ").append(cov.getDeliveryFee() != null ? cov.getDeliveryFee().toString() : "0.00")
-                    .append(" | compra_minima: S/ ").append(cov.getMinOrderAmount() != null ? cov.getMinOrderAmount().toString() : "0.00");
-            if (cov.getAliases() != null && !cov.getAliases().trim().isEmpty()) {
-                contextBuilder.append(" | aliases: ").append(cov.getAliases().trim());
+        if (userMessage != null && userMessage.startsWith("[UBICACIÓN]")) {
+            try {
+                java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("Latitud:\\s*(-?\\d+\\.\\d+),\\s*Longitud:\\s*(-?\\d+\\.\\d+)");
+                java.util.regex.Matcher matcher = pattern.matcher(userMessage);
+                if (matcher.find()) {
+                    lat = Double.parseDouble(matcher.group(1));
+                    lng = Double.parseDouble(matcher.group(2));
+                    logger.info("Coordenadas GPS obtenidas del mensaje actual: ({}, {})", lat, lng);
+                }
+            } catch (Exception e) {
+                logger.error("Error al parsear coordenadas del mensaje de ubicación: {}", e.getMessage());
             }
-            contextBuilder.append("\n");
         }
+
+        if (lat == null && contact != null) {
+            try {
+                List<Map<String, Object>> gpsAddress = jdbcTemplate.queryForList(
+                    "SELECT latitud, longitud FROM direcciones WHERE id_contacto = ? AND nombre_ubicacion = 'WhatsApp GPS' ORDER BY id_direccion DESC LIMIT 1",
+                    contact.getId()
+                );
+                if (!gpsAddress.isEmpty()) {
+                    Map<String, Object> row = gpsAddress.get(0);
+                    if (row.get("latitud") != null && row.get("longitud") != null) {
+                        lat = ((Number) row.get("latitud")).doubleValue();
+                        lng = ((Number) row.get("longitud")).doubleValue();
+                        logger.info("Coordenadas GPS obtenidas de la dirección del contacto {}: ({}, {})", contact.getId(), lat, lng);
+                    }
+                }
+            } catch (Exception e) {
+                logger.error("Error al obtener coordenadas GPS del contacto de la base de datos: {}", e.getMessage());
+            }
+        }
+
+        // 2. Si hay coordenadas válidas, buscar coincidencia en el archivo KMZ/KML configurado (de forma opcional)
+        boolean hasKmzMatch = false;
+        if (lat != null && lng != null) {
+            String kmzPath = settingsService.getSetting("ai.coverage.kmz");
+            if (kmzPath != null && !kmzPath.trim().isEmpty()) {
+                File kmzFile = getPhysicalFile(kmzPath);
+                if (kmzFile != null && kmzFile.exists()) {
+                    logger.info("Buscando cobertura para ({}, {}) en el archivo de mapas: {}", lat, lng, kmzFile.getAbsolutePath());
+                    String matchingZoneName = kmzParserService.checkCoverage(lat, lng, kmzFile);
+                    if (matchingZoneName != null) {
+                        hasKmzMatch = true;
+                        contextBuilder.append("\n📍 COBERTURA DETECTADA POR GPS (KMZ):\n");
+                        contextBuilder.append("- El cliente envió su ubicación GPS y coincide exactamente con el polígono geográfico de cobertura: \"")
+                                      .append(matchingZoneName).append("\".\n");
+                        
+                        // Buscar si esta zona/distrito tiene una tarifa configurada en 'shipping_coverage'
+                        List<ShippingCoverage> allCoverage = aiConfigDao.getAllShippingCoverage().stream()
+                                .filter(c -> c.getIsActive() != null && c.getIsActive())
+                                .collect(Collectors.toList());
+                                
+                        ShippingCoverage matchedZone = allCoverage.stream()
+                                .filter(c -> c.getDistrictName().equalsIgnoreCase(matchingZoneName) || 
+                                             (c.getAliases() != null && containsAny(matchingZoneName.toLowerCase(), c.getAliases().toLowerCase().split(","))))
+                                .findFirst().orElse(null);
+                        
+                        if (matchedZone != null) {
+                            contextBuilder.append("  Detalles de tarifa de la zona:\n")
+                                          .append("  * tarifa_envio: S/ ").append(matchedZone.getDeliveryFee() != null ? matchedZone.getDeliveryFee().toString() : "0.00").append("\n")
+                                          .append("  * compra_minima: S/ ").append(matchedZone.getMinOrderAmount() != null ? matchedZone.getMinOrderAmount().toString() : "0.00").append("\n");
+                        } else {
+                            contextBuilder.append("  * tarifa_envio: S/ 0.00 | compra_minima: S/ 0.00\n")
+                                          .append("  * Nota: No se encontró tarifa para el nombre \"").append(matchingZoneName).append("\" en la tabla 'shipping_coverage'. Dile que sí hay cobertura para su zona.\n");
+                        }
+                        contextBuilder.append("  * PRIORIDAD ABSOLUTA: Informa esta cobertura GPS al usuario. No uses deducciones por texto del distrito.\n\n");
+                    } else {
+                        hasKmzMatch = true;
+                        contextBuilder.append("\n📍 VERIFICACIÓN GPS (KMZ):\n");
+                        contextBuilder.append("- El cliente envió su ubicación GPS ({").append(lat).append(", ").append(lng)
+                                      .append("}), pero queda fuera de todos los polígonos de cobertura en el KMZ/KML cargado. ")
+                                      .append("Informa amablemente que NO hay cobertura para su ubicación actual. No permitas el pedido.\n\n");
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback: Si no hay coincidencia por KMZ, usar el flujo estándar de detección por texto del mensaje
+        if (!hasKmzMatch) {
+            List<ShippingCoverage> allCoverage = aiConfigDao.getAllShippingCoverage().stream()
+                    .filter(c -> c.getIsActive() != null && c.getIsActive())
+                    .collect(Collectors.toList());
+
+            List<ShippingCoverage> matchedCoverage = allCoverage.stream()
+                    .filter(c -> containsAny(normalizedMessage, c.getDistrictName()) || 
+                                 (c.getAliases() != null && containsAny(normalizedMessage, c.getAliases().split(","))))
+                    .collect(Collectors.toList());
+
+            List<ShippingCoverage> coverageToSend = (wantsDelivery && !matchedCoverage.isEmpty()) 
+                    ? matchedCoverage.stream().limit(10).collect(Collectors.toList())
+                    : allCoverage.stream().limit(10).collect(Collectors.toList());
+
+            contextBuilder.append("\nCOBERTURA Y TARIFAS DE ENVÍO:\n");
+            if (coverageToSend.isEmpty()) {
+                contextBuilder.append("- No hay zonas activas configuradas.\n");
+                return;
+            }
+
+            for (ShippingCoverage cov : coverageToSend) {
+                contextBuilder.append("- distrito: ").append(nullSafe(cov.getDistrictName()))
+                        .append(" | envio: S/ ").append(cov.getDeliveryFee() != null ? cov.getDeliveryFee().toString() : "0.00")
+                        .append(" | compra_minima: S/ ").append(cov.getMinOrderAmount() != null ? cov.getMinOrderAmount().toString() : "0.00");
+                if (cov.getAliases() != null && !cov.getAliases().trim().isEmpty()) {
+                    contextBuilder.append(" | aliases: ").append(cov.getAliases().trim());
+                }
+                contextBuilder.append("\n");
+            }
+        }
+    }
+
+    private File getPhysicalFile(String webPath) {
+        if (webPath == null || webPath.trim().isEmpty()) return null;
+        if (webPath.startsWith("/uploads/")) {
+            String filename = webPath.substring("/uploads/".length());
+            return new File("/app/uploads/", filename);
+        }
+        return new File(webPath);
     }
 
     private void appendFaqContext(StringBuilder contextBuilder, String normalizedMessage, String publicBaseUrl) {
@@ -743,6 +853,14 @@ public class GeminiService {
             sb.append("\n=== INSTRUCCIONES DE NEGOCIO ADICIONALES ===\n")
               .append(customInstructions.trim()).append("\n");
         }
+
+        // Reglas de Cobertura y Mapa Geográfico KML/KMZ
+        sb.append("\n=== REGLAS DE COBERTURA Y ENTREGAS (MAPA) ===\n")
+          .append("- El sistema cuenta con un mapa de cobertura geográfica KML/KMZ cargado en el servidor.\n")
+          .append("- REGLA CRÍTICA DE COBERTURA: Cuando el cliente consulte por cobertura de delivery o envíos (ej. '¿llegan a mi zona?', '¿tienen delivery?', '¿cuál es la cobertura?', etc.), NO le preguntes únicamente por su distrito o dirección escrita. Pídele de forma obligatoria y como primer paso que comparta su ubicación GPS nativa por WhatsApp (el pin de ubicación compartida) indicándole que es indispensable para verificar en nuestro mapa de reparto si llegamos a su domicilio exacto.\n")
+          .append("- Cuando el cliente comparta su ubicación GPS, el sistema validará automáticamente si las coordenadas caen dentro de las zonas de cobertura del mapa.\n")
+          .append("- Si las coordenadas son válidas y caen dentro del mapa de cobertura, se te proporcionarán los detalles en el bloque '📍 COBERTURA DETECTADA POR GPS (KMZ)' (Prioridad Absoluta). Confirma la cobertura al cliente indicándole su costo de envío y compra mínima.\n")
+          .append("- Si las coordenadas caen FUERA del mapa de cobertura, se te indicará en el bloque '📍 VERIFICACIÓN GPS (KMZ)'. Debes informar de manera muy amable que no tenemos cobertura de reparto en su ubicación actual y no permitir la creación del pedido.\n");
         
         return sb.toString();
     }

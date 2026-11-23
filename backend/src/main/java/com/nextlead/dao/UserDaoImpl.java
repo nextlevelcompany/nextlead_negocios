@@ -61,7 +61,7 @@ public class UserDaoImpl implements UserDao {
 
     @Override
     public Optional<User> findByUsername(String username) {
-        String sql = "SELECT id, username, password, role, first_name, last_name, location, bio, phone, website, avatar, modules FROM users WHERE username = ?";
+        String sql = "SELECT id, username, password, role, first_name, last_name, location, bio, phone, website, avatar, modules FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))";
         try {
             User user = jdbcTemplate.queryForObject(sql, rowMapper, username);
             return Optional.ofNullable(user);
