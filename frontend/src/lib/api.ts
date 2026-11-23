@@ -1,9 +1,22 @@
 import axios from "axios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const getBaseUrl = (): string => {
+  if (typeof window !== "undefined") {
+    const envUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    // Si contiene localhost o 127.0.0.1 pero la página se visita desde una IP remota o dominio,
+    // forzar ruta relativa vacía para pasar obligatoriamente por el proxy de Next.js
+    if (envUrl.includes("localhost") || envUrl.includes("127.0.0.1")) {
+      if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+        return "";
+      }
+    }
+    return envUrl;
+  }
+  return process.env.NEXT_PUBLIC_API_URL || "";
+};
 
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getBaseUrl(),
   headers: {
     "Content-Type": "application/json",
   },
@@ -13,6 +26,12 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== "undefined") {
+      // Forzar que nunca intente llamar a localhost desde un cliente remoto
+      if (config.baseURL && (config.baseURL.includes("localhost") || config.baseURL.includes("127.0.0.1"))) {
+        if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+          config.baseURL = "";
+        }
+      }
       // Nunca enviar Authorization previo al endpoint de login
       if (config.url && config.url.includes("/auth/login")) {
         if (config.headers) {
