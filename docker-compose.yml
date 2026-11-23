@@ -1,17 +1,15 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
     container_name: nextlead_postgres
     restart: always
     environment:
-      POSTGRES_DB: nextlead
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: nextlead_password
-      TZ: America/Lima
+      POSTGRES_DB: ${POSTGRES_DB:-nextlead}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nextlead_password}
+      TZ: ${TZ:-America/Lima}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,16 +27,16 @@ services:
     container_name: nextlead_backend
     restart: always
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/nextlead
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: nextlead_password
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/nextlead}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-nextlead_password}
       SPRING_SQL_INIT_MODE: always
-      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN}
-      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID}
-      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN}
-      WHATSAPP_DISPLAY_NUMBER: ${WHATSAPP_DISPLAY_NUMBER}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      TZ: America/Lima
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-nextlead_verify_token}
+      WHATSAPP_DISPLAY_NUMBER: ${WHATSAPP_DISPLAY_NUMBER:-+15551935901}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      TZ: ${TZ:-America/Lima}
     ports:
       - "8081:8080"
     volumes:
@@ -54,13 +52,16 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8081}
     container_name: nextlead_frontend
     restart: always
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8081
-      - TZ=America/Lima
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+      - BACKEND_INTERNAL_URL=http://backend:8080
+      - TZ=${TZ:-America/Lima}
     depends_on:
       - backend
     networks:
@@ -71,8 +72,8 @@ services:
     container_name: nextlead_pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@nextlead.com
-      PGADMIN_DEFAULT_PASSWORD: admin_password
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@nextlead.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin_password}
     ports:
       - "5050:80"
     depends_on:
