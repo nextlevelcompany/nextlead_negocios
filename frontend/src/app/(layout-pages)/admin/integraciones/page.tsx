@@ -70,7 +70,7 @@ import {
 import { toast } from "sonner";
 import api from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface KnowledgeBaseItem {
   id?: number;

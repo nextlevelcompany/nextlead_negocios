@@ -183,7 +183,7 @@ export default function QuotationConfigPage() {
   const getMediaUrl = (url?: string) => {
     if (!url) return "";
     if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
-    const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
+    const base = process.env.NEXT_PUBLIC_API_URL || "";
     return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
   };
 
