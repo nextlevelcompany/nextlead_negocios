@@ -226,8 +226,8 @@ export function MobileDrawerMenu({ open, onOpenChange }: MobileDrawerMenuProps) 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
-        side="right"
-        className="w-[88vw] sm:w-[380px] p-0 flex flex-col bg-background/98 border-l shadow-2xl focus:outline-none"
+        side="left"
+        className="w-[88vw] sm:w-[380px] p-0 flex flex-col bg-background/98 border-r shadow-2xl focus:outline-none"
       >
         <SheetHeader className="px-5 py-3.5 border-b shrink-0 text-left bg-muted/20">
           <div className="flex items-center justify-between">

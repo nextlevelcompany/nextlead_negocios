@@ -57,6 +57,19 @@ export function MobileHeader({ onOpenDrawer }: MobileHeaderProps) {
   return (
     <header className="sticky top-0 z-40 flex md:hidden h-14 w-full shrink-0 items-center justify-between border-b bg-background px-3 shadow-xs">
       <div className="flex items-center gap-1.5 min-w-0">
+        {onOpenDrawer && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onOpenDrawer}
+            aria-label="Menú principal"
+            className="h-9 w-9 text-muted-foreground hover:text-foreground shrink-0 -ml-1"
+            title="Abrir menú"
+          >
+            <Menu className="size-5" />
+          </Button>
+        )}
         {!isRootView && (
           <Button
             type="button"
@@ -78,20 +91,6 @@ export function MobileHeader({ onOpenDrawer }: MobileHeaderProps) {
         <GlobalSearch />
         <NotificationDropdown />
         <UserDropdown />
-        {/* Menú de Opciones en la esquina superior derecha */}
-        {onOpenDrawer && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onOpenDrawer}
-            aria-label="Menú de opciones"
-            className="h-9 w-9 text-muted-foreground hover:text-foreground ml-0.5"
-            title="Abrir menú de opciones"
-          >
-            <Menu className="size-5" />
-          </Button>
-        )}
       </div>
     </header>
   )
