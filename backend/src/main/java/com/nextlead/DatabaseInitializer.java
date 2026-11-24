@@ -281,6 +281,63 @@ public class DatabaseInitializer implements CommandLineRunner {
             contactDao.save(persona);
             System.out.println(">>> Persona Natural semilla creada correctamente.");
         }
+
+        // ── Siembra Masiva Automática (52,483 contactos B2B / Experian) ─────
+        seedContactsFromDump();
+    }
+
+    private void seedContactsFromDump() {
+        if (contactDao.count() >= 100) {
+            return;
+        }
+
+        System.out.println(">>> Base de datos nueva detectada. Verificando archivo de siembra /data/contacts_data.sql.gz...");
+        try (java.io.InputStream is = getClass().getResourceAsStream("/data/contacts_data.sql.gz")) {
+            if (is == null) {
+                System.out.println(">>> No se encontró /data/contacts_data.sql.gz en los recursos.");
+                return;
+            }
+
+            System.out.println(">>> Restaurando catálogo masivo de 52,483 contactos B2B...");
+            try {
+                jdbcTemplate.execute("ALTER TABLE contacts DISABLE TRIGGER trg_new_contact_opportunity;");
+            } catch (Exception ignored) {}
+
+            try (java.util.zip.GZIPInputStream gzip = new java.util.zip.GZIPInputStream(is);
+                 java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(gzip, java.nio.charset.StandardCharsets.UTF_8))) {
+
+                StringBuilder batch = new StringBuilder();
+                String line;
+                int count = 0;
+                while ((line = reader.readLine()) != null) {
+                    String trimmed = line.trim();
+                    if (trimmed.isEmpty() || trimmed.startsWith("--") || trimmed.startsWith("\\")) {
+                        continue;
+                    }
+                    batch.append(line).append("\n");
+                    if (trimmed.endsWith(";")) {
+                        count++;
+                        if (count >= 500) {
+                            jdbcTemplate.execute(batch.toString());
+                            batch.setLength(0);
+                            count = 0;
+                        }
+                    }
+                }
+                if (batch.length() > 0) {
+                    jdbcTemplate.execute(batch.toString());
+                }
+            } finally {
+                try {
+                    jdbcTemplate.execute("ALTER TABLE contacts ENABLE TRIGGER trg_new_contact_opportunity;");
+                } catch (Exception ignored) {}
+            }
+
+            long total = contactDao.count();
+            System.out.println(">>> ¡Restauración masiva completada exitosamente! Total contactos: " + total);
+        } catch (Exception e) {
+            System.err.println(">>> Advertencia en siembra masiva de contactos: " + e.getMessage());
+        }
     }
 
     private void ensureSchemaIntegrity() {

@@ -12,6 +12,7 @@ services:
       - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts/contacts_data.sql.gz:/docker-entrypoint-initdb.d/contacts_data.sql.gz:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d nextlead"]
       interval: 10s
@@ -42,6 +43,12 @@ services:
     volumes:
       - nextlead_uploads:/app/uploads
       - nextlead_backend_logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,7 +70,8 @@ services:
       - BACKEND_INTERNAL_URL=http://backend:8080
       - TZ=${TZ:-America/Lima}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - nextlead_network
 
