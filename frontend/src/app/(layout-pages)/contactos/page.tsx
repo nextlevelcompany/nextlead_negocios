@@ -61,9 +61,11 @@ import {
   Clock,
   Sparkles,
   CheckCircle2,
+  FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { ImportContactsExcelModal } from "@/components/contactos/ImportContactsExcelModal";
 
 interface Direccion {
   idDireccion?: number;
@@ -142,6 +144,7 @@ export default function ContactsDirectoryPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [contactOrders, setContactOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   // Load KPI Stats from Backend
   const loadStats = async () => {
@@ -361,6 +364,16 @@ export default function ContactsDirectoryPage() {
           >
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
             Actualizar
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+            onClick={() => setImportModalOpen(true)}
+          >
+            <FileSpreadsheet className="size-3.5" />
+            Importar Excel
           </Button>
 
           <Button
@@ -1158,6 +1171,15 @@ export default function ContactsDirectoryPage() {
           )}
         </DialogContent>
       </Dialog>
+      {/* Modal de Importación Masiva Excel */}
+      <ImportContactsExcelModal
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
+        onSuccess={() => {
+          loadStats();
+          loadContacts();
+        }}
+      />
     </div>
   );
 }

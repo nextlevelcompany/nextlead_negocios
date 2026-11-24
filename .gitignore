@@ -47,6 +47,7 @@ postgres_data/
 pgadmin/
 nextlead_database_complete.sql
 *.sql.gz
+!backend/scripts/contacts_data.sql.gz
 *.dump
 
 # 6. Variables de Entorno y Secretos Sensibles

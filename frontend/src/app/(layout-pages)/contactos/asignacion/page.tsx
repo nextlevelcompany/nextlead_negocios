@@ -65,8 +65,10 @@ import {
   UserMinus,
   CheckSquare,
   Square,
+  FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ImportContactsExcelModal } from "@/components/contactos/ImportContactsExcelModal";
 
 interface Asesor {
   trabajador_id: number;
@@ -149,6 +151,7 @@ export default function AsignacionCarteraPage() {
   const [modalBatchOpen, setModalBatchOpen] = useState(false);
   const [modalRoundRobinOpen, setModalRoundRobinOpen] = useState(false);
   const [modalUnassignOpen, setModalUnassignOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   // Estado formularios modal
   const [targetAsesorId, setTargetAsesorId] = useState<number | null>(null);
@@ -485,6 +488,16 @@ export default function AsignacionCarteraPage() {
           >
             <Shuffle className="size-4 mr-2" />
             Reparto Round-Robin
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setImportModalOpen(true)}
+            className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+          >
+            <FileSpreadsheet className="size-4 mr-2" />
+            Importar Excel
           </Button>
 
           <Button
@@ -1372,6 +1385,15 @@ export default function AsignacionCarteraPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* MODAL 5: IMPORTACIÓN MASIVA EXCEL */}
+      <ImportContactsExcelModal
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
+        onSuccess={() => {
+          loadStats();
+          loadCuentas();
+        }}
+      />
     </div>
   );
 }

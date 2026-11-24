@@ -4,13 +4,17 @@ import com.nextlead.dao.ContactDao;
 import com.nextlead.models.Contact;
 import com.nextlead.models.Direccion;
 import com.nextlead.models.Ubigeo;
+import com.nextlead.services.ContactExcelService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -19,11 +23,45 @@ public class ContactController {
 
     private final ContactDao contactDao;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    private final ContactExcelService contactExcelService;
 
     @Autowired
-    public ContactController(ContactDao contactDao, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
+    public ContactController(ContactDao contactDao, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate, ContactExcelService contactExcelService) {
         this.contactDao = contactDao;
         this.jdbcTemplate = jdbcTemplate;
+        this.contactExcelService = contactExcelService;
+    }
+
+    // GET /api/contacts/template — Descargar plantilla de ejemplo Excel (.xlsx)
+    @GetMapping("/template")
+    public ResponseEntity<byte[]> downloadTemplate() {
+        byte[] excelBytes = contactExcelService.generateSampleTemplate();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"plantilla_contactos_nextlead.xlsx\"")
+                .header(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                .body(excelBytes);
+    }
+
+    // POST /api/contacts/import-excel — Importar contactos masivamente desde archivo Excel
+    @PostMapping("/import-excel")
+    public ResponseEntity<?> importExcel(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "updateExisting", defaultValue = "false") boolean updateExisting) {
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "El archivo está vacío."));
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || (!originalFilename.toLowerCase().endsWith(".xlsx") && !originalFilename.toLowerCase().endsWith(".xls"))) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "El archivo debe ser un libro de Excel (.xlsx o .xls)."));
+        }
+
+        try {
+            Map<String, Object> result = contactExcelService.importExcel(file.getInputStream(), updateExisting);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("success", false, "message", "Error al procesar el archivo: " + e.getMessage()));
+        }
     }
 
     // GET /api/contacts/stats — KPIs agregados de contactos y semáforos Experian
