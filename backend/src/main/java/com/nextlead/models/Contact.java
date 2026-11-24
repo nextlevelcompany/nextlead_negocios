@@ -35,6 +35,16 @@ public class Contact {
     private String calificacionSbs;
     private String rangoVentas;
     private String cargo;
+    // Asignación y Métricas de Cartera B2B
+    private Integer asignadoAId;
+    private String asignadoANombre;
+    private Long trabajadorId;
+    private String trabajadorNombre;
+    private LocalDateTime fechaAsignacion;
+    private Integer diasAsignados;
+    private Integer oportunidadesVigentes;
+    private Integer ventasCerradas;
+    private Double montoVentas;
     // Relación 1-N con direcciones
     private List<Direccion> direcciones = new ArrayList<>();
 
@@ -122,4 +132,31 @@ public class Contact {
 
     public String getCargo() { return cargo; }
     public void setCargo(String cargo) { this.cargo = cargo; }
+
+    public Integer getAsignadoAId() { return asignadoAId; }
+    public void setAsignadoAId(Integer asignadoAId) { this.asignadoAId = asignadoAId; }
+
+    public String getAsignadoANombre() { return asignadoANombre; }
+    public void setAsignadoANombre(String asignadoANombre) { this.asignadoANombre = asignadoANombre; }
+
+    public Long getTrabajadorId() { return trabajadorId; }
+    public void setTrabajadorId(Long trabajadorId) { this.trabajadorId = trabajadorId; }
+
+    public String getTrabajadorNombre() { return trabajadorNombre; }
+    public void setTrabajadorNombre(String trabajadorNombre) { this.trabajadorNombre = trabajadorNombre; }
+
+    public LocalDateTime getFechaAsignacion() { return fechaAsignacion; }
+    public void setFechaAsignacion(LocalDateTime fechaAsignacion) { this.fechaAsignacion = fechaAsignacion; }
+
+    public Integer getDiasAsignados() { return diasAsignados != null ? diasAsignados : 0; }
+    public void setDiasAsignados(Integer diasAsignados) { this.diasAsignados = diasAsignados; }
+
+    public Integer getOportunidadesVigentes() { return oportunidadesVigentes != null ? oportunidadesVigentes : 0; }
+    public void setOportunidadesVigentes(Integer oportunidadesVigentes) { this.oportunidadesVigentes = oportunidadesVigentes; }
+
+    public Integer getVentasCerradas() { return ventasCerradas != null ? ventasCerradas : 0; }
+    public void setVentasCerradas(Integer ventasCerradas) { this.ventasCerradas = ventasCerradas; }
+
+    public Double getMontoVentas() { return montoVentas != null ? montoVentas : 0.0; }
+    public void setMontoVentas(Double montoVentas) { this.montoVentas = montoVentas; }
 }

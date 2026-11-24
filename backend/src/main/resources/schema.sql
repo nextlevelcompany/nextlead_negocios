@@ -104,6 +104,12 @@ CREATE INDEX IF NOT EXISTS idx_contacts_telefono ON contacts(telefono_principal)
 CREATE INDEX IF NOT EXISTS idx_contacts_empresa_id ON contacts(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_semaforo ON contacts(semaforo_experian);
 CREATE INDEX IF NOT EXISTS idx_direcciones_id_contacto ON direcciones(id_contacto);
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS asignado_a_id INT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS trabajador_id BIGINT REFERENCES trabajadores(id) ON DELETE SET NULL;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS fecha_asignacion TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_contacts_asignado_a ON contacts(asignado_a_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_trabajador_id ON contacts(trabajador_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_fecha_asignacion ON contacts(fecha_asignacion);
 
 -- Tabla para almacenar configuraciones dinámicas de la aplicación (como credenciales de Meta y Gemini)
 CREATE TABLE IF NOT EXISTS system_settings (

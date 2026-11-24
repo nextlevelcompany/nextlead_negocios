@@ -59,6 +59,91 @@ public class ContactController {
         return ResponseEntity.ok(contactDao.findAll());
     }
 
+    // =======================================================
+    // ENDPOINTS GESTIÓN DE CARTERA B2B Y ASIGNACIÓN
+    // =======================================================
+
+    @GetMapping("/cartera")
+    public ResponseEntity<?> getCartera(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String semaforo,
+            @RequestParam(required = false) String asignadoFilter,
+            @RequestParam(required = false) Integer usuarioId,
+            @RequestParam(required = false) Long trabajadorId,
+            @RequestParam(required = false) Integer diasMin,
+            @RequestParam(required = false) Boolean conOportunidades) {
+        return ResponseEntity.ok(contactDao.findCarteraPaginated(
+                page, size, search, semaforo, asignadoFilter, usuarioId, trabajadorId, diasMin, conOportunidades
+        ));
+    }
+
+    @GetMapping("/cartera/stats")
+    public ResponseEntity<?> getCarteraStats() {
+        return ResponseEntity.ok(contactDao.getCarteraStats());
+    }
+
+    public static class AssignRequest {
+        public List<Long> contactIds;
+        public Integer usuarioId;
+        public Long trabajadorId;
+    }
+
+    @PostMapping("/cartera/assign")
+    public ResponseEntity<?> assignContacts(@RequestBody AssignRequest req) {
+        if (req.contactIds == null || req.contactIds.isEmpty()) {
+            return ResponseEntity.badRequest().body("Debe seleccionar al menos una cuenta.");
+        }
+        int updated = contactDao.assignContacts(req.contactIds, req.usuarioId, req.trabajadorId);
+        return ResponseEntity.ok(java.util.Map.of("success", true, "updated", updated));
+    }
+
+    public static class BatchAssignRequest {
+        public int limit;
+        public String semaforo;
+        public Integer usuarioId;
+        public Long trabajadorId;
+    }
+
+    @PostMapping("/cartera/assign-batch")
+    public ResponseEntity<?> assignBatch(@RequestBody BatchAssignRequest req) {
+        if (req.limit <= 0) {
+            return ResponseEntity.badRequest().body("La cantidad de cuentas debe ser mayor a 0.");
+        }
+        int updated = contactDao.assignBatch(req.limit, req.semaforo, req.usuarioId, req.trabajadorId);
+        return ResponseEntity.ok(java.util.Map.of("success", true, "updated", updated));
+    }
+
+    public static class RoundRobinAssignRequest {
+        public int limit;
+        public String semaforo;
+        public List<Long> trabajadorIds;
+        public List<Integer> usuarioIds;
+    }
+
+    @PostMapping("/cartera/assign-round-robin")
+    public ResponseEntity<?> assignRoundRobin(@RequestBody RoundRobinAssignRequest req) {
+        if (req.limit <= 0) {
+            return ResponseEntity.badRequest().body("La cantidad de cuentas debe ser mayor a 0.");
+        }
+        int updated = contactDao.assignRoundRobin(req.limit, req.semaforo, req.trabajadorIds, req.usuarioIds);
+        return ResponseEntity.ok(java.util.Map.of("success", true, "updated", updated));
+    }
+
+    public static class UnassignRequest {
+        public List<Long> contactIds;
+    }
+
+    @PostMapping("/cartera/unassign")
+    public ResponseEntity<?> unassignContacts(@RequestBody UnassignRequest req) {
+        if (req.contactIds == null || req.contactIds.isEmpty()) {
+            return ResponseEntity.badRequest().body("Debe seleccionar al menos una cuenta.");
+        }
+        int updated = contactDao.unassignContacts(req.contactIds);
+        return ResponseEntity.ok(java.util.Map.of("success", true, "updated", updated));
+    }
+
     // GET /api/contacts/paginated — Paginación explícita optimizada para 50k+ registros
     @GetMapping("/paginated")
     public ResponseEntity<?> getPaginated(

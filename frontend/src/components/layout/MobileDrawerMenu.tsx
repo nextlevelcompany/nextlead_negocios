@@ -87,6 +87,7 @@ const fullNavGroups: NavGroup[] = [
         items: [
           { title: "Contactos", url: "/contactos" },
           { title: "Crear Contacto", url: "/contactos/create" },
+          { title: "Asignación de Cartera", url: "/contactos/asignacion" },
         ],
       },
       {

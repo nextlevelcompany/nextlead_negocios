@@ -97,6 +97,10 @@ const data = {
               title: "Crear Contacto",
               url: "/contactos/create",
             },
+            {
+              title: "Asignación de Cartera",
+              url: "/contactos/asignacion",
+            },
           ],
         },
         {

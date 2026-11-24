@@ -23,4 +23,10 @@ public interface ContactDao {
     List<Ubigeo> findAllUbigeos();
     long count();
     java.util.Map<String, Object> findPaginated(int page, int size, String search, String tipoPersona, String semaforo);
+    java.util.Map<String, Object> findCarteraPaginated(int page, int size, String search, String semaforo, String asignadoFilter, Integer usuarioId, Long trabajadorId, Integer diasMin, Boolean conOportunidades);
+    java.util.Map<String, Object> getCarteraStats();
+    int assignContacts(List<Long> contactIds, Integer usuarioId, Long trabajadorId);
+    int assignBatch(int limit, String semaforo, Integer usuarioId, Long trabajadorId);
+    int assignRoundRobin(int limit, String semaforo, List<Long> trabajadorIds, List<Integer> usuarioIds);
+    int unassignContacts(List<Long> contactIds);
 }
