@@ -43,10 +43,10 @@ public class ContactController {
     // GET /api/contacts/check-document?numero={numero}&excludeId={id} — Comprobar si un número de documento ya está registrado
     @GetMapping("/check-document")
     public ResponseEntity<?> checkDocument(
-            @RequestParam String numero,
+            @RequestParam(required = false) String numero,
             @RequestParam(required = false) Long excludeId) {
         if (numero == null || numero.isBlank()) {
-            return ResponseEntity.badRequest().body(java.util.Map.of("message", "Número de documento requerido."));
+            return ResponseEntity.ok(java.util.Map.of("exists", false));
         }
         Optional<Contact> existingOpt = contactDao.findByNumeroDocumento(numero.trim());
         if (existingOpt.isPresent()) {
@@ -227,7 +227,7 @@ public class ContactController {
         }
 
         // Validación de número de documento
-        if (req.numeroDocumento != null) {
+        if (req.numeroDocumento != null && !req.numeroDocumento.trim().isBlank()) {
             String numDocTrim = req.numeroDocumento.trim();
             if ("DNI".equals(req.tipoDocumento)) {
                 if (!numDocTrim.matches("^[0-9]{8}$")) {
@@ -251,13 +251,14 @@ public class ContactController {
                 errors.add("El número de documento " + numDocTrim + " ya está registrado y pertenece a: " + (nombreExistente != null ? nombreExistente.trim() : "otro contacto") + " (ID #" + c.getId() + ").");
             }
         } else {
-            errors.add("El número de documento es obligatorio.");
+            if ("EMPRESA".equals(req.tipoPersona)) {
+                errors.add("El número de RUC es obligatorio para empresa.");
+            }
         }
 
         // Campos de nombre/razón social
         if ("NATURAL".equals(req.tipoPersona)) {
             if (req.nombres == null || req.nombres.isBlank()) errors.add("Nombres es obligatorio para persona natural.");
-            if (req.apellidos == null || req.apellidos.isBlank()) errors.add("Apellidos es obligatorio para persona natural.");
         } else if ("EMPRESA".equals(req.tipoPersona)) {
             if (req.razonSocial == null || req.razonSocial.isBlank()) errors.add("Razón social es obligatoria para empresa.");
         }
@@ -296,9 +297,9 @@ public class ContactController {
         Contact contact = new Contact();
         contact.setTipoPersona(req.tipoPersona);
         contact.setTipoDocumento(req.tipoDocumento);
-        contact.setNumeroDocumento(req.numeroDocumento.trim());
-        contact.setNombres(req.nombres);
-        contact.setApellidos(req.apellidos);
+        contact.setNumeroDocumento(req.numeroDocumento != null && !req.numeroDocumento.trim().isBlank() ? req.numeroDocumento.trim() : null);
+        contact.setNombres(req.nombres != null && !req.nombres.trim().isBlank() ? req.nombres.trim() : null);
+        contact.setApellidos(req.apellidos != null && !req.apellidos.trim().isBlank() ? req.apellidos.trim() : null);
         contact.setRazonSocial(req.razonSocial);
         contact.setTelefonoPrincipal(req.telefonoPrincipal.trim());
         contact.setTelefonoSecundario(
@@ -361,7 +362,7 @@ public class ContactController {
         }
 
         // Validación de número de documento
-        if (req.numeroDocumento != null) {
+        if (req.numeroDocumento != null && !req.numeroDocumento.trim().isBlank()) {
             String numDocTrim = req.numeroDocumento.trim();
             if ("DNI".equals(req.tipoDocumento)) {
                 if (!numDocTrim.matches("^[0-9]{8}$")) {
@@ -385,13 +386,14 @@ public class ContactController {
                 errors.add("El número de documento " + numDocTrim + " ya pertenece a otro contacto registrado: " + (nombreExistente != null ? nombreExistente.trim() : "ID #" + c.getId()) + ".");
             }
         } else {
-            errors.add("El número de documento es obligatorio.");
+            if ("EMPRESA".equals(req.tipoPersona)) {
+                errors.add("El número de RUC es obligatorio para empresa.");
+            }
         }
 
         // Campos de nombre/razón social
         if ("NATURAL".equals(req.tipoPersona)) {
             if (req.nombres == null || req.nombres.isBlank()) errors.add("Nombres es obligatorio para persona natural.");
-            if (req.apellidos == null || req.apellidos.isBlank()) errors.add("Apellidos es obligatorio para persona natural.");
         } else if ("EMPRESA".equals(req.tipoPersona)) {
             if (req.razonSocial == null || req.razonSocial.isBlank()) errors.add("Razón social es obligatoria para empresa.");
         }
@@ -430,9 +432,9 @@ public class ContactController {
         Contact contact = opt.get();
         contact.setTipoPersona(req.tipoPersona);
         contact.setTipoDocumento(req.tipoDocumento);
-        contact.setNumeroDocumento(req.numeroDocumento.trim());
-        contact.setNombres(req.nombres);
-        contact.setApellidos(req.apellidos);
+        contact.setNumeroDocumento(req.numeroDocumento != null && !req.numeroDocumento.trim().isBlank() ? req.numeroDocumento.trim() : null);
+        contact.setNombres(req.nombres != null && !req.nombres.trim().isBlank() ? req.nombres.trim() : null);
+        contact.setApellidos(req.apellidos != null && !req.apellidos.trim().isBlank() ? req.apellidos.trim() : null);
         contact.setRazonSocial(req.razonSocial);
         contact.setTelefonoPrincipal(req.telefonoPrincipal.trim());
         contact.setTelefonoSecundario(

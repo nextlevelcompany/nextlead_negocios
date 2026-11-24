@@ -588,11 +588,11 @@ function ContactDetailViewContent() {
   // Add related contact person to Empresa
   const handleSaveNewPerson = async () => {
     if (!contact) return;
-    if (!newPerson.nombres.trim() || !newPerson.apellidos.trim()) {
-      toast.error("Nombres y Apellidos son obligatorios.");
+    if (!newPerson.nombres.trim()) {
+      toast.error("El nombre es obligatorio.");
       return;
     }
-    if (!/^[0-9]{8}$/.test(newPerson.numeroDocumento.trim())) {
+    if (newPerson.numeroDocumento.trim() && !/^[0-9]{8}$/.test(newPerson.numeroDocumento.trim())) {
       toast.error("El DNI debe tener exactamente 8 dígitos numéricos.");
       return;
     }
@@ -607,9 +607,9 @@ function ContactDetailViewContent() {
       const payload = {
         tipoPersona: "NATURAL",
         tipoDocumento: "DNI",
-        numeroDocumento: newPerson.numeroDocumento.trim(),
+        numeroDocumento: newPerson.numeroDocumento.trim() ? newPerson.numeroDocumento.trim() : null,
         nombres: newPerson.nombres.trim(),
-        apellidos: newPerson.apellidos.trim(),
+        apellidos: newPerson.apellidos.trim() ? newPerson.apellidos.trim() : null,
         telefonoPrincipal: cleanPhone,
         email: newPerson.email?.trim() || null,
         referencia: newPerson.referencia?.trim() || null,
@@ -2027,10 +2027,10 @@ function ContactDetailViewContent() {
                       </div>
                       <div className="flex flex-col gap-1">
                         <Label className="text-xs font-medium">
-                          Apellidos <span className="text-destructive">*</span>
+                          Apellidos <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
                         </Label>
                         <Input
-                          placeholder="Ej: Silva Ramos"
+                          placeholder="Ej: Silva Ramos (Opcional)"
                           value={newPerson.apellidos}
                           onChange={(e) => setNewPerson({ ...newPerson, apellidos: e.target.value })}
                           className="h-8 text-xs sm:text-sm"
@@ -2041,10 +2041,10 @@ function ContactDetailViewContent() {
                     <div className="grid grid-cols-3 gap-2.5">
                       <div className="flex flex-col gap-1">
                         <Label className="text-xs font-medium">
-                          DNI <span className="text-destructive">*</span>
+                          DNI <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
                         </Label>
                         <Input
-                          placeholder="8 dígitos"
+                          placeholder="8 dígitos (Opcional)"
                           maxLength={8}
                           value={newPerson.numeroDocumento}
                           onChange={(e) => setNewPerson({ ...newPerson, numeroDocumento: e.target.value })}

@@ -550,13 +550,15 @@ function CreateContactContent() {
     }
 
     if (tipoPersona === "NATURAL") {
-      if (!nombres.trim() || !apellidos.trim()) {
-        toast.error("Nombres y Apellidos son obligatorios para persona natural.");
+      if (!nombres.trim()) {
+        toast.error("El nombre es obligatorio para persona natural.");
         return;
       }
-      if (tipoDocumento === "DNI" && !/^[0-9]{8}$/.test(numeroDocumento.trim())) {
-        toast.error("El DNI debe tener exactamente 8 dígitos numéricos.");
-        return;
+      if (numeroDocumento.trim()) {
+        if (tipoDocumento === "DNI" && !/^[0-9]{8}$/.test(numeroDocumento.trim())) {
+          toast.error("El DNI debe tener exactamente 8 dígitos numéricos.");
+          return;
+        }
       }
     } else {
       if (!razonSocial.trim()) {
@@ -580,9 +582,9 @@ function CreateContactContent() {
       const payload = {
         tipoPersona,
         tipoDocumento,
-        numeroDocumento: numeroDocumento.trim(),
+        numeroDocumento: numeroDocumento.trim() ? numeroDocumento.trim() : null,
         nombres: tipoPersona === "NATURAL" ? nombres.trim() : null,
-        apellidos: tipoPersona === "NATURAL" ? apellidos.trim() : null,
+        apellidos: tipoPersona === "NATURAL" && apellidos.trim() ? apellidos.trim() : null,
         razonSocial: tipoPersona === "EMPRESA" ? razonSocial.trim() : null,
         telefonoPrincipal: cleanPhone,
         telefonoSecundario: telefonoSecundario.trim() ? telefonoSecundario.trim() : null,
@@ -829,7 +831,7 @@ function CreateContactContent() {
                 <div className="col-span-2 flex flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      Número Documento <span className="text-destructive">*</span>
+                      Número Documento {tipoPersona === "EMPRESA" ? <span className="text-destructive">*</span> : <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>}
                       {docChecking && (
                         <span className="text-[10px] text-muted-foreground italic flex items-center gap-1 font-normal">
                           <RefreshCw className="size-2.5 animate-spin" /> Verificando...
@@ -841,7 +843,7 @@ function CreateContactContent() {
                     </span>
                   </div>
                   <Input
-                    placeholder={tipoPersona === "EMPRESA" ? "Ej: 20603844590" : "Ej: 72345678"}
+                    placeholder={tipoPersona === "EMPRESA" ? "Ej: 20603844590" : "Ej: 72345678 (Opcional)"}
                     value={numeroDocumento}
                     onChange={(e) => setNumeroDocumento(e.target.value)}
                     className={`h-8 text-xs sm:text-sm font-mono transition-colors ${
@@ -849,7 +851,7 @@ function CreateContactContent() {
                         ? "border-destructive focus-visible:ring-destructive/30 bg-destructive/5 text-destructive font-semibold"
                         : ""
                     }`}
-                    required
+                    required={tipoPersona === "EMPRESA"}
                   />
 
                   {/* Alerta de Documento Duplicado */}
@@ -894,14 +896,13 @@ function CreateContactContent() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label className="text-xs font-medium text-muted-foreground">
-                      Apellidos <span className="text-destructive">*</span>
+                      Apellidos <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
                     </Label>
                     <Input
-                      placeholder="Ej: Quispe Mamani"
+                      placeholder="Ej: Quispe Mamani (Opcional)"
                       value={apellidos}
                       onChange={(e) => setApellidos(e.target.value)}
                       className="h-8 text-xs sm:text-sm"
-                      required
                     />
                   </div>
                 </div>

@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS contacts (
     id                   BIGSERIAL PRIMARY KEY,
     tipo_persona         VARCHAR(20)  NOT NULL CHECK (tipo_persona IN ('NATURAL','EMPRESA')),
     tipo_documento       VARCHAR(20)  NOT NULL CHECK (tipo_documento IN ('DNI','CE','RUC')),
-    numero_documento     VARCHAR(20)  NOT NULL UNIQUE,
+    numero_documento     VARCHAR(20)  UNIQUE,
     nombres              VARCHAR(100),
     apellidos            VARCHAR(100),
     razon_social         VARCHAR(200),
