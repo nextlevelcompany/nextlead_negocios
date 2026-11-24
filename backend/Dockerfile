@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jre-alpine
+FROM public.ecr.aws/docker/library/eclipse-temurin:17-jre-alpine
 WORKDIR /app
 COPY app.jar app.jar
 EXPOSE 8080
