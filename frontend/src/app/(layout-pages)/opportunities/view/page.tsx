@@ -73,6 +73,9 @@ import {
   FileText,
   Phone,
   MessageSquare,
+  UserCheck,
+  Briefcase,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -105,7 +108,13 @@ interface Opportunity {
   contacto_nombre_completo?: string | null;
   contacto_persona?: string | null;
   contacto_persona_calculado?: string | null;
+  trabajador_id?: number | null;
   vendedor_nombre?: string | null;
+  vendedor_perfil?: string | null;
+  vendedor_perfil_id?: number | null;
+  supervisor_id?: number | null;
+  supervisor_nombre?: string | null;
+  equipo_nombre?: string | null;
   telefono_movil?: string | null;
   contacto_email?: string | null;
   tipo_propuesta?: string | null;
@@ -147,6 +156,12 @@ export default function OpportunitiesKanbanPage() {
   const [filterTag, setFilterTag] = useState("all");
   const [filterDate, setFilterDate] = useState<string | null>(null);
 
+  // Commercial Filters (Supervisor, Modalidad: Ejecutivo/Freelance/Supervisor, Asesor)
+  const [filterSupervisor, setFilterSupervisor] = useState<string>("all");
+  const [filterPerfil, setFilterPerfil] = useState<string>("all"); // 'all' | 'ejecutivo' | 'freelance' | 'supervisor'
+  const [filterVendedor, setFilterVendedor] = useState<string>("all");
+  const [staffList, setStaffList] = useState<any[]>([]);
+
   // Modals state
   const [showColModal, setShowColModal] = useState(false);
   const [colForm, setColForm] = useState<{
@@ -177,12 +192,20 @@ export default function OpportunitiesKanbanPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/api/opportunities/kanban");
+      const [res, staffRes] = await Promise.all([
+        api.get("/api/opportunities/kanban"),
+        api.get("/api/payroll/staff").catch(() => ({ data: [] })),
+      ]);
       if (res.data) {
         setColumns(res.data.columns || []);
         setOpportunities(res.data.opportunities || []);
         setTags(res.data.tags || []);
         setContacts(res.data.contacts || []);
+        if (res.data.staff && Array.isArray(res.data.staff) && res.data.staff.length > 0) {
+          setStaffList(res.data.staff);
+        } else if (staffRes.data && Array.isArray(staffRes.data)) {
+          setStaffList(staffRes.data);
+        }
       }
     } catch (err: any) {
       console.error("Error loading opportunities:", err);
@@ -195,6 +218,83 @@ export default function OpportunitiesKanbanPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Lista dinámica de Supervisores únicos
+  const allSupervisores = useMemo(() => {
+    const map = new Map<string, { id: string; label: string }>();
+    staffList.forEach((st) => {
+      const isSup =
+        (st.rol_operativo && st.rol_operativo.toLowerCase().includes("supervisor")) ||
+        (st.perfil_nombre && st.perfil_nombre.toLowerCase().includes("supervisor")) ||
+        st.perfil_comision_id === 4;
+      if (isSup && st.id) {
+        const label = `${st.nombre} ${st.apellido || ""}`.trim();
+        map.set(String(st.id), { id: String(st.id), label });
+      }
+    });
+    opportunities.forEach((o) => {
+      if (
+        o.supervisor_id &&
+        o.supervisor_nombre &&
+        o.supervisor_nombre.trim() !== "Sin Supervisor" &&
+        o.supervisor_nombre.trim() !== ""
+      ) {
+        if (!map.has(String(o.supervisor_id))) {
+          map.set(String(o.supervisor_id), { id: String(o.supervisor_id), label: o.supervisor_nombre });
+        }
+      } else if (
+        o.supervisor_nombre &&
+        o.supervisor_nombre.trim() !== "Sin Supervisor" &&
+        o.supervisor_nombre.trim() !== ""
+      ) {
+        if (!map.has(o.supervisor_nombre)) {
+          map.set(o.supervisor_nombre, { id: o.supervisor_nombre, label: o.supervisor_nombre });
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [staffList, opportunities]);
+
+  // Lista dinámica de Ejecutivos / Vendedores únicos
+  const allVendedores = useMemo(() => {
+    const map = new Map<string, { id: string; label: string; perfil?: string; perfilKey?: string }>();
+    staffList.forEach((st) => {
+      if (st.id && st.nombre) {
+        const label = `${st.nombre} ${st.apellido || ""}`.trim();
+        const perfilStr = st.perfil_nombre || st.rol_operativo || "Asesor";
+        map.set(String(st.id), {
+          id: String(st.id),
+          label,
+          perfil: perfilStr,
+          perfilKey: perfilStr.toLowerCase(),
+        });
+      }
+    });
+    opportunities.forEach((o) => {
+      const idKey = o.trabajador_id ? String(o.trabajador_id) : (o.vendedor_nombre || "");
+      if (idKey && !map.has(idKey)) {
+        map.set(idKey, {
+          id: idKey,
+          label: o.vendedor_nombre || "Asesor",
+          perfil: o.vendedor_perfil || undefined,
+          perfilKey: (o.vendedor_perfil || "").toLowerCase(),
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [staffList, opportunities]);
+
+  // Lista de vendedores filtrada opcionalmente por modalidad seleccionada
+  const visibleVendedores = useMemo(() => {
+    if (filterPerfil === "all") return allVendedores;
+    return allVendedores.filter((v) => {
+      const p = (v.perfil || "").toLowerCase();
+      if (filterPerfil === "freelance") return p.includes("freelance");
+      if (filterPerfil === "supervisor") return p.includes("supervisor");
+      if (filterPerfil === "ejecutivo") return !p.includes("freelance") && !p.includes("supervisor");
+      return true;
+    });
+  }, [allVendedores, filterPerfil]);
 
   // Compute Weekdays for calendar strip
   const weekDays = useMemo(() => {
@@ -250,7 +350,9 @@ export default function OpportunitiesKanbanPage() {
         (opp.contacto_nombre_completo && opp.contacto_nombre_completo.toLowerCase().includes(term)) ||
         (opp.numero_documento && opp.numero_documento.includes(term)) ||
         (opp.notas && opp.notas.toLowerCase().includes(term)) ||
-        (opp.etiquetas && opp.etiquetas.toLowerCase().includes(term));
+        (opp.etiquetas && opp.etiquetas.toLowerCase().includes(term)) ||
+        (opp.vendedor_nombre && opp.vendedor_nombre.toLowerCase().includes(term)) ||
+        (opp.supervisor_nombre && opp.supervisor_nombre.toLowerCase().includes(term));
 
       const matchPriority =
         filterPriority === "all" ||
@@ -264,9 +366,39 @@ export default function OpportunitiesKanbanPage() {
         !filterDate ||
         (opp.created_at && opp.created_at.startsWith(filterDate));
 
-      return matchSearch && matchPriority && matchTag && matchDate;
+      // 1. Filtro por Supervisor
+      let matchSupervisor = true;
+      if (filterSupervisor !== "all") {
+        matchSupervisor =
+          String(opp.supervisor_id) === filterSupervisor ||
+          opp.supervisor_nombre === filterSupervisor;
+      }
+
+      // 2. Filtro por Modalidad / Perfil (ejecutivo, freelance, supervisor)
+      let matchPerfil = true;
+      if (filterPerfil !== "all") {
+        const p = (opp.vendedor_perfil || "").toLowerCase();
+        if (filterPerfil === "freelance") {
+          matchPerfil = p.includes("freelance");
+        } else if (filterPerfil === "supervisor") {
+          matchPerfil = p.includes("supervisor");
+        } else if (filterPerfil === "ejecutivo") {
+          matchPerfil = !p.includes("freelance") && !p.includes("supervisor");
+        }
+      }
+
+      // 3. Filtro por Ejecutivo / Vendedor específico
+      let matchVendedor = true;
+      if (filterVendedor !== "all") {
+        matchVendedor =
+          String(opp.trabajador_id) === filterVendedor ||
+          opp.vendedor_nombre === filterVendedor ||
+          String(opp.usuario_id) === filterVendedor;
+      }
+
+      return matchSearch && matchPriority && matchTag && matchDate && matchSupervisor && matchPerfil && matchVendedor;
     });
-  }, [opportunities, searchTerm, filterPriority, filterTag, filterDate]);
+  }, [opportunities, searchTerm, filterPriority, filterTag, filterDate, filterSupervisor, filterPerfil, filterVendedor]);
 
   // Statistics (Calculados Sin IGV según precios base)
   const stats = useMemo(() => {
@@ -713,7 +845,7 @@ export default function OpportunitiesKanbanPage() {
               <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
                 <Filter className="size-3.5 text-primary" />
                 <span>Filtros</span>
-                {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null) && (
+                {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null || filterSupervisor !== "all" || filterPerfil !== "all" || filterVendedor !== "all") && (
                   <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-normal bg-primary/10 text-primary">
                     Activos
                   </Badge>
@@ -854,9 +986,75 @@ export default function OpportunitiesKanbanPage() {
               </select>
             </div>
 
+            {/* 5. Equipo Comercial: Supervisor, Modalidad y Asesor */}
+            <div className="space-y-2.5 pt-2 border-t">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <Briefcase className="size-3.5 text-primary" />
+                <span>Equipo Comercial</span>
+              </div>
+
+              {/* Filtro: Supervisor */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <ShieldCheck className="size-3 text-emerald-600" />
+                  Supervisor
+                </label>
+                <select
+                  className="w-full h-8 px-2 rounded-md border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  value={filterSupervisor}
+                  onChange={(e) => setFilterSupervisor(e.target.value)}
+                >
+                  <option value="all">Todos los Supervisores</option>
+                  {allSupervisores.map((sup) => (
+                    <option key={sup.id} value={sup.id}>
+                      {sup.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filtro: Modalidad / Perfil (Ejecutivo, Freelance, Supervisor) */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Briefcase className="size-3 text-blue-600" />
+                  Modalidad / Perfil
+                </label>
+                <select
+                  className="w-full h-8 px-2 rounded-md border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  value={filterPerfil}
+                  onChange={(e) => setFilterPerfil(e.target.value)}
+                >
+                  <option value="all">Todas las Modalidades</option>
+                  <option value="ejecutivo">Ejecutivo (Full Time / Planilla)</option>
+                  <option value="freelance">Freelance (Comisionista)</option>
+                  <option value="supervisor">Supervisor</option>
+                </select>
+              </div>
+
+              {/* Filtro: Ejecutivo / Asesor */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <UserCheck className="size-3 text-indigo-600" />
+                  Ejecutivo / Asesor
+                </label>
+                <select
+                  className="w-full h-8 px-2 rounded-md border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  value={filterVendedor}
+                  onChange={(e) => setFilterVendedor(e.target.value)}
+                >
+                  <option value="all">Todos los Asesores</option>
+                  {visibleVendedores.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label} {v.perfil ? `(${v.perfil})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {/* Reset Filters & Results Count */}
             <div className="pt-2 border-t space-y-2">
-              {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null) && (
+              {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null || filterSupervisor !== "all" || filterPerfil !== "all" || filterVendedor !== "all") && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -866,6 +1064,9 @@ export default function OpportunitiesKanbanPage() {
                     setFilterPriority("all");
                     setFilterTag("all");
                     setFilterDate(null);
+                    setFilterSupervisor("all");
+                    setFilterPerfil("all");
+                    setFilterVendedor("all");
                   }}
                 >
                   <RotateCcw className="size-3" />
@@ -892,18 +1093,102 @@ export default function OpportunitiesKanbanPage() {
               >
                 <PanelLeftOpen className="size-3.5" />
                 Mostrar Filtros
-                {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null) && (
+                {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null || filterSupervisor !== "all" || filterPerfil !== "all" || filterVendedor !== "all") && (
                   <span className="size-2 rounded-full bg-primary" />
                 )}
               </Button>
               <span className="text-muted-foreground text-[11px]">
                 Mostrando <strong className="text-foreground">{filteredOpps.length}</strong> de {opportunities.length} oportunidades
-                {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null) && (
+                {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null || filterSupervisor !== "all" || filterPerfil !== "all" || filterVendedor !== "all") && (
                   <span className="text-primary ml-1">(Filtros activos)</span>
                 )}
               </span>
             </div>
           )}
+
+          {/* Quick Commercial Filter Bar */}
+          <div className="bg-card border rounded-xl p-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5 shrink-0">
+                <Filter className="size-3.5 text-primary" />
+                <span className="hidden sm:inline">Filtros Rápidos:</span>
+              </span>
+
+              {/* Selector Supervisor */}
+              <div className="flex items-center gap-1">
+                <ShieldCheck className="size-3.5 text-emerald-600 hidden md:inline shrink-0" />
+                <select
+                  className="h-8 px-2.5 rounded-lg border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary shadow-2xs"
+                  value={filterSupervisor}
+                  onChange={(e) => setFilterSupervisor(e.target.value)}
+                  title="Filtrar por Supervisor"
+                >
+                  <option value="all">Supervisor: Todos</option>
+                  {allSupervisores.map((sup) => (
+                    <option key={sup.id} value={sup.id}>
+                      Sup. {sup.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Selector Modalidad / Perfil */}
+              <div className="flex items-center gap-1">
+                <Briefcase className="size-3.5 text-blue-600 hidden md:inline shrink-0" />
+                <select
+                  className="h-8 px-2.5 rounded-lg border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary shadow-2xs"
+                  value={filterPerfil}
+                  onChange={(e) => setFilterPerfil(e.target.value)}
+                  title="Filtrar por Modalidad (Ejecutivo, Freelance, Supervisor)"
+                >
+                  <option value="all">Modalidad: Todas</option>
+                  <option value="ejecutivo">Ejecutivo (Full Time / Planilla)</option>
+                  <option value="freelance">Freelance (Comisionista)</option>
+                  <option value="supervisor">Supervisor</option>
+                </select>
+              </div>
+
+              {/* Selector Ejecutivo / Asesor */}
+              <div className="flex items-center gap-1">
+                <UserCheck className="size-3.5 text-indigo-600 hidden md:inline shrink-0" />
+                <select
+                  className="h-8 px-2.5 rounded-lg border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary shadow-2xs max-w-[210px]"
+                  value={filterVendedor}
+                  onChange={(e) => setFilterVendedor(e.target.value)}
+                  title="Filtrar por Ejecutivo / Asesor comercial"
+                >
+                  <option value="all">Asesor: Todos</option>
+                  {visibleVendedores.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label} {v.perfil ? `(${v.perfil})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Reset Commercial Filters if any active */}
+              {(filterSupervisor !== "all" || filterPerfil !== "all" || filterVendedor !== "all") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFilterSupervisor("all");
+                    setFilterPerfil("all");
+                    setFilterVendedor("all");
+                  }}
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1 px-2"
+                  title="Restablecer filtros comerciales"
+                >
+                  <RotateCcw className="size-3" />
+                  Limpiar comercial
+                </Button>
+              )}
+            </div>
+
+            <div className="text-[11px] text-muted-foreground ml-auto shrink-0 font-medium">
+              <span className="font-bold text-foreground">{filteredOpps.length}</span> oportunidades
+            </div>
+          </div>
 
           {/* Main Content Area */}
           {loading ? (
@@ -1238,42 +1523,75 @@ export default function OpportunitiesKanbanPage() {
                               </p>
                             )}
 
-                            {/* 8. Card Footer: PDF Button, Edit Button, Sales rep & Date */}
-                            <div className="flex items-center justify-between pt-1.5 border-t text-xs">
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 text-[10px] px-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950 gap-1 font-semibold"
-                                  asChild
-                                  title="Ver / Imprimir Cotización PDF"
-                                >
-                                  <Link href={`/opportunities/print?id=${opp.id}`}>
-                                    <FileText className="size-3" />
-                                    PDF
-                                  </Link>
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                                  asChild
-                                  title="Editar oportunidad"
-                                >
-                                  <Link href={`/opportunities/create?edit_id=${opp.id}`}>
-                                    <Edit className="size-3" />
-                                  </Link>
-                                </Button>
-                              </div>
+                            {/* 8. Card Footer: PDF, Edit, Sales Rep, Profile Badge, Supervisor & Date */}
+                            <div className="flex flex-col gap-1.5 pt-2 border-t text-xs">
+                              <div className="flex items-center justify-between gap-1">
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 text-[10px] px-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950 gap-1 font-semibold"
+                                    asChild
+                                    title="Ver / Imprimir Cotización PDF"
+                                  >
+                                    <Link href={`/opportunities/print?id=${opp.id}`}>
+                                      <FileText className="size-3" />
+                                      PDF
+                                    </Link>
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                                    asChild
+                                    title="Editar oportunidad"
+                                  >
+                                    <Link href={`/opportunities/create?edit_id=${opp.id}`}>
+                                      <Edit className="size-3" />
+                                    </Link>
+                                  </Button>
+                                </div>
 
-                              <div className="flex flex-col items-end text-[10px] text-muted-foreground leading-tight">
-                                {opp.vendedor_nombre && (
-                                  <span className="truncate max-w-[100px] font-medium text-foreground">
-                                    {opp.vendedor_nombre}
+                                {opp.created_at && (
+                                  <span className="text-[10px] text-muted-foreground font-mono">
+                                    {opp.created_at.substring(0, 10)}
                                   </span>
                                 )}
-                                {opp.created_at && (
-                                  <span>{opp.created_at.substring(0, 10)}</span>
+                              </div>
+
+                              {/* Commercial staff assignment info */}
+                              <div className="flex items-center justify-between text-[10px] bg-muted/40 rounded px-1.5 py-1 gap-1">
+                                <div className="flex items-center gap-1 truncate max-w-[170px]" title={`Asesor: ${opp.vendedor_nombre || "Sin Asignar"}`}>
+                                  <User className="size-3 text-muted-foreground shrink-0" />
+                                  <span className="truncate font-medium text-foreground">
+                                    {opp.vendedor_nombre || "Sin Asignar"}
+                                  </span>
+                                  {opp.vendedor_perfil && (
+                                    <span
+                                      className={`px-1 py-0 rounded text-[9px] font-semibold shrink-0 ${
+                                        opp.vendedor_perfil.toLowerCase().includes("freelance")
+                                          ? "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                                          : opp.vendedor_perfil.toLowerCase().includes("supervisor")
+                                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                                          : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                                      }`}
+                                    >
+                                      {opp.vendedor_perfil.toLowerCase().includes("freelance")
+                                        ? "Freelance"
+                                        : opp.vendedor_perfil.toLowerCase().includes("supervisor")
+                                        ? "Supervisor"
+                                        : "Ejecutivo"}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {opp.supervisor_nombre && opp.supervisor_nombre !== "Sin Supervisor" && (
+                                  <span
+                                    className="text-[9px] text-muted-foreground truncate max-w-[100px] text-right"
+                                    title={`Supervisor: ${opp.supervisor_nombre}`}
+                                  >
+                                    Sup: {opp.supervisor_nombre.split(" ")[0]}
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -1297,6 +1615,8 @@ export default function OpportunitiesKanbanPage() {
                   <TableHead className="w-14 text-xs">ID</TableHead>
                   <TableHead className="text-xs">Título de Lead</TableHead>
                   <TableHead className="text-xs">Cliente / Contacto</TableHead>
+                  <TableHead className="text-xs">Asesor / Modalidad</TableHead>
+                  <TableHead className="text-xs">Supervisor</TableHead>
                   <TableHead className="text-xs">Etapa</TableHead>
                   <TableHead className="text-xs">Prioridad</TableHead>
                   <TableHead className="text-xs">Valor (Sin IGV)</TableHead>
@@ -1308,7 +1628,7 @@ export default function OpportunitiesKanbanPage() {
               <TableBody>
                 {filteredOpps.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-10 text-muted-foreground text-xs">
+                    <TableCell colSpan={11} className="text-center py-10 text-muted-foreground text-xs">
                       No se encontraron oportunidades con los filtros seleccionados.
                     </TableCell>
                   </TableRow>
@@ -1334,6 +1654,37 @@ export default function OpportunitiesKanbanPage() {
                               </span>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-foreground">
+                              {opp.vendedor_nombre || "Sin Asignar"}
+                            </span>
+                            {opp.vendedor_perfil && (
+                              <span
+                                className={`w-fit px-1.5 py-0.2 rounded text-[9px] font-semibold ${
+                                  opp.vendedor_perfil.toLowerCase().includes("freelance")
+                                    ? "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                                    : opp.vendedor_perfil.toLowerCase().includes("supervisor")
+                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                                    : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                                }`}
+                              >
+                                {opp.vendedor_perfil.toLowerCase().includes("freelance")
+                                  ? "Freelance"
+                                  : opp.vendedor_perfil.toLowerCase().includes("supervisor")
+                                  ? "Supervisor"
+                                  : "Ejecutivo"}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-muted-foreground text-xs">
+                            {opp.supervisor_nombre && opp.supervisor_nombre !== "Sin Supervisor"
+                              ? opp.supervisor_nombre
+                              : "-"}
+                          </span>
                         </TableCell>
                         <TableCell>
                           <Badge

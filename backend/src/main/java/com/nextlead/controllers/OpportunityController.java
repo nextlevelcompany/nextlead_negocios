@@ -42,12 +42,18 @@ public class OpportunityController {
     @GetMapping("/kanban")
     public ResponseEntity<?> getKanbanData() {
         try {
+            // Auto hot migration: Ensure columns exist
+            try {
+                jdbcTemplate.execute("ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS trabajador_id INT REFERENCES trabajadores(id) ON DELETE SET NULL");
+                jdbcTemplate.execute("ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS supervisor_id INT REFERENCES trabajadores(id) ON DELETE SET NULL");
+            } catch (Exception ignored) {}
+
             // Columns (Stages)
             List<Map<String, Object>> columns = jdbcTemplate.queryForList(
                 "SELECT * FROM kanban_columnas ORDER BY orden ASC"
             );
 
-            // Opportunities
+            // Opportunities with Commercial Staff & Supervisor info
             List<Map<String, Object>> opps = jdbcTemplate.queryForList(
                 "SELECT o.*, " +
                 "       COALESCE(NULLIF(o.contacto_persona, ''), " +
@@ -56,10 +62,21 @@ public class OpportunityController {
                 "       ) as contacto_persona_calculado, " +
                 "       c.tipo_persona as contacto_tipo_persona, c.numero_documento, c.telefono_principal as telefono_movil, c.email as contacto_email, " +
                 "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as contacto_nombre_completo, " +
-                "       CONCAT(u.first_name, ' ', u.last_name) as vendedor_nombre " +
+                "       COALESCE(o.trabajador_id, t.id) as trabajador_id, " +
+                "       COALESCE(TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))), NULLIF(o.firma_nombre, ''), CONCAT(u.first_name, ' ', u.last_name)) as vendedor_nombre, " +
+                "       rp.id as vendedor_perfil_id, " +
+                "       COALESCE(rp.nombre, t.rol_operativo, 'Ejecutivo') as vendedor_perfil, " +
+                "       COALESCE(o.supervisor_id, t.supervisor_id) as supervisor_id, " +
+                "       TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre, " +
+                "       COALESCE(t.equipo, 'Equipo Principal') as equipo_nombre " +
                 "FROM oportunidades o " +
                 "LEFT JOIN contacts c ON o.contacto_id = c.id " +
                 "LEFT JOIN users u ON o.usuario_id = u.id " +
+                "LEFT JOIN trabajadores t ON (o.trabajador_id IS NOT NULL AND o.trabajador_id = t.id) " +
+                "                         OR (o.trabajador_id IS NULL AND t.usuario_id = o.usuario_id) " +
+                "                         OR (o.trabajador_id IS NULL AND o.usuario_id IS NULL AND o.firma_nombre IS NOT NULL AND (t.nombre ILIKE o.firma_nombre OR CONCAT(t.nombre, ' ', t.apellido) ILIKE o.firma_nombre)) " +
+                "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
+                "LEFT JOIN trabajadores sup ON COALESCE(o.supervisor_id, t.supervisor_id) = sup.id " +
                 "ORDER BY o.orden ASC, o.id DESC"
             );
 
@@ -79,12 +96,25 @@ public class OpportunityController {
                 "ORDER BY display_name ASC"
             );
 
-            return ResponseEntity.ok(Map.of(
-                "columns", columns,
-                "opportunities", opps,
-                "tags", tags,
-                "contacts", contacts
-            ));
+            // Active Staff for Commercial Filters & Assignment
+            List<Map<String, Object>> staff = jdbcTemplate.queryForList(
+                "SELECT t.id, t.nombre, t.apellido, t.rol_operativo, t.perfil_comision_id, rp.nombre as perfil_nombre, " +
+                "       t.supervisor_id, TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre, t.equipo " +
+                "FROM trabajadores t " +
+                "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
+                "LEFT JOIN trabajadores sup ON t.supervisor_id = sup.id " +
+                "WHERE t.estado IS NULL OR t.estado = 'Activo' " +
+                "ORDER BY t.nombre ASC"
+            );
+
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("columns", columns);
+            resp.put("opportunities", opps);
+            resp.put("tags", tags);
+            resp.put("contacts", contacts);
+            resp.put("staff", staff);
+
+            return ResponseEntity.ok(resp);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("message", "Error al obtener datos de oportunidades: " + e.getMessage()));
@@ -112,6 +142,8 @@ public class OpportunityController {
                 jdbcTemplate.execute("ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS firma_email VARCHAR(150)");
                 jdbcTemplate.execute("ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS condiciones_comerciales TEXT");
                 jdbcTemplate.execute("ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS detalles_json TEXT");
+                jdbcTemplate.execute("ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS trabajador_id INT REFERENCES trabajadores(id) ON DELETE SET NULL");
+                jdbcTemplate.execute("ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS supervisor_id INT REFERENCES trabajadores(id) ON DELETE SET NULL");
             } catch (Exception ignored) {}
 
             if (req.titulo == null || req.titulo.trim().isEmpty()) {
@@ -121,13 +153,23 @@ public class OpportunityController {
                 return ResponseEntity.badRequest().body(Map.of("message", "La etapa o columna es obligatoria."));
             }
 
+            Integer finalTrabajadorId = req.trabajador_id;
+            Integer finalSupervisorId = req.supervisor_id;
+            if (finalTrabajadorId != null && finalSupervisorId == null) {
+                try {
+                    finalSupervisorId = jdbcTemplate.queryForObject(
+                        "SELECT supervisor_id FROM trabajadores WHERE id = ?", Integer.class, finalTrabajadorId
+                    );
+                } catch (Exception ignored) {}
+            }
+
             boolean isEdit = req.id != null;
             Long oppId;
 
             if (isEdit) {
                 jdbcTemplate.update(
                     "UPDATE oportunidades SET titulo = ?, contacto_id = ?, etapa_id = ?, valor = ?, prioridad = ?, etiquetas = ?, notas = ?, productos_json = ?, " +
-                    "tipo_propuesta = ?, total_instalacion = ?, plazo_acuerdo = ?, moneda = ?, firma_nombre = ?, firma_cargo = ?, firma_celular = ?, firma_email = ?, condiciones_comerciales = ?, detalles_json = ?, contacto_persona = ? " +
+                    "tipo_propuesta = ?, total_instalacion = ?, plazo_acuerdo = ?, moneda = ?, firma_nombre = ?, firma_cargo = ?, firma_celular = ?, firma_email = ?, condiciones_comerciales = ?, detalles_json = ?, contacto_persona = ?, trabajador_id = ?, supervisor_id = ? " +
                     "WHERE id = ?",
                     req.titulo, req.contacto_id, req.etapa_id, req.valor, req.prioridad, req.etiquetas, req.notas, req.productos_json,
                     req.tipo_propuesta != null ? req.tipo_propuesta : "venta",
@@ -136,6 +178,7 @@ public class OpportunityController {
                     req.moneda != null ? req.moneda : "Soles",
                     req.firma_nombre, req.firma_cargo, req.firma_celular, req.firma_email,
                     req.condiciones_comerciales, req.detalles_json, req.contacto_persona,
+                    finalTrabajadorId, finalSupervisorId,
                     req.id
                 );
                 oppId = req.id;
@@ -154,15 +197,16 @@ public class OpportunityController {
 
                 jdbcTemplate.update(
                     "INSERT INTO oportunidades (titulo, contacto_id, etapa_id, valor, prioridad, etiquetas, usuario_id, orden, notas, productos_json, " +
-                    "tipo_propuesta, total_instalacion, plazo_acuerdo, moneda, firma_nombre, firma_cargo, firma_celular, firma_email, condiciones_comerciales, detalles_json, contacto_persona, created_at) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, timezone(COALESCE((SELECT value_text FROM system_settings WHERE key_name = 'timezone' LIMIT 1), 'America/Lima'), now()))",
+                    "tipo_propuesta, total_instalacion, plazo_acuerdo, moneda, firma_nombre, firma_cargo, firma_celular, firma_email, condiciones_comerciales, detalles_json, contacto_persona, trabajador_id, supervisor_id, created_at) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, timezone(COALESCE((SELECT value_text FROM system_settings WHERE key_name = 'timezone' LIMIT 1), 'America/Lima'), now()))",
                     req.titulo, req.contacto_id, req.etapa_id, req.valor, req.prioridad, req.etiquetas, defaultUserId, (maxOrder != null ? maxOrder : 0) + 1, req.notas, req.productos_json,
                     req.tipo_propuesta != null ? req.tipo_propuesta : "venta",
                     req.total_instalacion != null ? req.total_instalacion : 0.0,
                     req.plazo_acuerdo != null ? req.plazo_acuerdo : 12,
                     req.moneda != null ? req.moneda : "Soles",
                     req.firma_nombre, req.firma_cargo, req.firma_celular, req.firma_email,
-                    req.condiciones_comerciales, req.detalles_json, req.contacto_persona
+                    req.condiciones_comerciales, req.detalles_json, req.contacto_persona,
+                    finalTrabajadorId, finalSupervisorId
                 );
                 oppId = jdbcTemplate.queryForObject("SELECT lastval()", Long.class);
             }
@@ -191,11 +235,21 @@ public class OpportunityController {
                 "       c.tipo_persona as contacto_tipo_persona, c.numero_documento, c.telefono_principal as telefono_movil, c.email as contacto_email, " +
                 "       c.razon_social, c.nombres, c.apellidos, " +
                 "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as contacto_nombre_completo, " +
-                "       CONCAT(u.first_name, ' ', u.last_name) as vendedor_nombre, " +
+                "       COALESCE(o.trabajador_id, t.id) as trabajador_id, " +
+                "       COALESCE(TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))), NULLIF(o.firma_nombre, ''), CONCAT(u.first_name, ' ', u.last_name)) as vendedor_nombre, " +
+                "       rp.id as vendedor_perfil_id, " +
+                "       COALESCE(rp.nombre, t.rol_operativo, 'Ejecutivo') as vendedor_perfil, " +
+                "       COALESCE(o.supervisor_id, t.supervisor_id) as supervisor_id, " +
+                "       TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre, " +
                 "       k.nombre as etapa_nombre " +
                 "FROM oportunidades o " +
                 "LEFT JOIN contacts c ON o.contacto_id = c.id " +
                 "LEFT JOIN users u ON o.usuario_id = u.id " +
+                "LEFT JOIN trabajadores t ON (o.trabajador_id IS NOT NULL AND o.trabajador_id = t.id) " +
+                "                         OR (o.trabajador_id IS NULL AND t.usuario_id = o.usuario_id) " +
+                "                         OR (o.trabajador_id IS NULL AND o.usuario_id IS NULL AND o.firma_nombre IS NOT NULL AND (t.nombre ILIKE o.firma_nombre OR CONCAT(t.nombre, ' ', t.apellido) ILIKE o.firma_nombre)) " +
+                "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
+                "LEFT JOIN trabajadores sup ON COALESCE(o.supervisor_id, t.supervisor_id) = sup.id " +
                 "LEFT JOIN kanban_columnas k ON o.etapa_id = k.id " +
                 "WHERE o.id = ?",
                 id
@@ -520,12 +574,15 @@ public class OpportunityController {
 
             // Fetch opportunity details
             Map<String, Object> opp = jdbcTemplate.queryForMap(
-                "SELECT titulo, contacto_id, usuario_id, valor, total_instalacion, prioridad, notas, productos_json, detalles_json FROM oportunidades WHERE id = ?",
+                "SELECT titulo, contacto_id, usuario_id, valor, total_instalacion, prioridad, notas, productos_json, detalles_json, trabajador_id, supervisor_id FROM oportunidades WHERE id = ?",
                 oppId
             );
 
             Long contactoId = opp.get("contacto_id") != null ? ((Number) opp.get("contacto_id")).longValue() : null;
             Integer usuarioId = opp.get("usuario_id") != null ? ((Number) opp.get("usuario_id")).intValue() : null;
+            Integer trabajadorId = opp.get("trabajador_id") != null ? ((Number) opp.get("trabajador_id")).intValue() : null;
+            Integer workerSupervisorId = opp.get("supervisor_id") != null ? ((Number) opp.get("supervisor_id")).intValue() : null;
+
             if (usuarioId != null) {
                 try {
                     Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users WHERE id = ?", Integer.class, usuarioId);
@@ -603,21 +660,19 @@ public class OpportunityController {
             }
 
             // Insert into ventas (Venta Directa Formal - Estado inicial: Por Instalar, 1ra Factura Pendiente)
-            Integer trabajadorId = null;
-            if (usuarioId != null) {
+            if (trabajadorId == null && usuarioId != null) {
                 try {
-                    trabajadorId = jdbcTemplate.queryForObject("SELECT id FROM trabajadores WHERE usuario_id = ? AND estado = 'Activo' LIMIT 1", Integer.class, usuarioId);
+                    trabajadorId = jdbcTemplate.queryForObject("SELECT id FROM trabajadores WHERE usuario_id = ? AND (estado IS NULL OR estado = 'Activo') LIMIT 1", Integer.class, usuarioId);
                 } catch (Exception ignored) {}
             }
             if (trabajadorId == null) {
                 try {
-                    trabajadorId = jdbcTemplate.queryForObject("SELECT id FROM trabajadores WHERE estado = 'Activo' ORDER BY id ASC LIMIT 1", Integer.class);
+                    trabajadorId = jdbcTemplate.queryForObject("SELECT id FROM trabajadores WHERE (estado IS NULL OR estado = 'Activo') ORDER BY id ASC LIMIT 1", Integer.class);
                 } catch (Exception ignored) {}
             }
 
             String workerEquipo = "Equipo Principal";
-            Integer workerSupervisorId = null;
-            if (trabajadorId != null) {
+            if (workerSupervisorId == null && trabajadorId != null) {
                 try {
                     Map<String, Object> wInfo = jdbcTemplate.queryForMap(
                         "SELECT equipo, supervisor_id FROM trabajadores WHERE id = ?", trabajadorId
@@ -904,6 +959,8 @@ public class OpportunityController {
         public String condiciones_comerciales;
         public String detalles_json;
         public String contacto_persona;
+        public Integer trabajador_id;
+        public Integer supervisor_id;
     }
 
     public static class MoveOpportunityRequest {

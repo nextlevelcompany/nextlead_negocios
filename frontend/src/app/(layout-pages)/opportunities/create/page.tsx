@@ -120,7 +120,11 @@ function CreateOpportunityContent() {
     firma_email: "",
     condiciones_comerciales: "",
     contacto_persona: "",
+    trabajador_id: null as number | null,
+    supervisor_id: null as number | null,
   });
+
+  const [staffList, setStaffList] = useState<any[]>([]);
 
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
@@ -161,6 +165,15 @@ function CreateOpportunityContent() {
         setSettings(loadedSettings);
         setUbigeosList(Array.isArray(ubiRes.data) ? ubiRes.data : []);
 
+        if (oppRes.data?.staff && Array.isArray(oppRes.data.staff) && oppRes.data.staff.length > 0) {
+          setStaffList(oppRes.data.staff);
+        } else {
+          try {
+            const stRes = await api.get("/api/payroll/staff");
+            if (Array.isArray(stRes.data)) setStaffList(stRes.data);
+          } catch (_) {}
+        }
+
         if (editId) {
           const oppToEdit = opps.find((o) => String(o.id) === String(editId));
           if (oppToEdit) {
@@ -182,6 +195,8 @@ function CreateOpportunityContent() {
               firma_email: oppToEdit.firma_email || loadedSettings["cotizacion.firma_email_defecto"] || "",
               condiciones_comerciales: oppToEdit.condiciones_comerciales || loadedSettings["cotizacion.condiciones_defecto"] || "",
               contacto_persona: oppToEdit.contacto_persona || "",
+              trabajador_id: oppToEdit.trabajador_id ? Number(oppToEdit.trabajador_id) : null,
+              supervisor_id: oppToEdit.supervisor_id ? Number(oppToEdit.supervisor_id) : null,
             });
 
             if (oppToEdit.etiquetas) {
@@ -502,6 +517,8 @@ function CreateOpportunityContent() {
         firma_email: form.firma_email,
         condiciones_comerciales: form.condiciones_comerciales,
         contacto_persona: selectedContactPerson || form.contacto_persona || "",
+        trabajador_id: form.trabajador_id ? Number(form.trabajador_id) : null,
+        supervisor_id: form.supervisor_id ? Number(form.supervisor_id) : null,
         detalles_json: JSON.stringify(items),
         productos_json: JSON.stringify(productosCompat),
       };
@@ -1105,11 +1122,53 @@ function CreateOpportunityContent() {
 
                 {/* Asesor Comercial Suscriptor */}
                 <div className="space-y-2 pt-2 border-t">
-                  <Label className="text-xs font-bold flex items-center gap-1">
-                    <UserCheck className="size-3 text-emerald-600" />
-                    Ejecutivo Comercial que Firma:
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold flex items-center gap-1">
+                      <UserCheck className="size-3 text-emerald-600" />
+                      Ejecutivo Comercial que Firma:
+                    </Label>
+                    {form.trabajador_id && (
+                      <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.2 rounded font-semibold">
+                        Asignado del Personal
+                      </span>
+                    )}
+                  </div>
+
                   <div className="space-y-1.5">
+                    {/* Select from registered staff */}
+                    {staffList.length > 0 && (
+                      <select
+                        className="w-full h-8 px-2 rounded-md border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary mb-1"
+                        value={form.trabajador_id || ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) {
+                            setForm((prev) => ({ ...prev, trabajador_id: null, supervisor_id: null }));
+                            return;
+                          }
+                          const st = staffList.find((s) => String(s.id) === val);
+                          if (st) {
+                            setForm((prev) => ({
+                              ...prev,
+                              trabajador_id: st.id,
+                              supervisor_id: st.supervisor_id || null,
+                              firma_nombre: `${st.nombre} ${st.apellido || ""}`.trim(),
+                              firma_cargo: st.perfil_nombre || st.rol_operativo || "Asesor Comercial",
+                              firma_celular: st.telefono || prev.firma_celular,
+                              firma_email: st.email || prev.firma_email,
+                            }));
+                          }
+                        }}
+                      >
+                        <option value="">-- Seleccionar Asesor del Personal --</option>
+                        {staffList.map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.nombre} {st.apellido || ""} ({st.perfil_nombre || st.rol_operativo || "Asesor"})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
                     <Input
                       placeholder="Nombre del Asesor"
                       value={form.firma_nombre}

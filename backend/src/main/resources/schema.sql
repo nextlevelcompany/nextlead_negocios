@@ -693,6 +693,8 @@ CREATE TABLE IF NOT EXISTS oportunidades (
 -- Agregar columnas para soportar más detalles y lista de productos en Oportunidades (CRM)
 ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS notas TEXT;
 ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS productos_json TEXT;
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS trabajador_id INT REFERENCES trabajadores(id) ON DELETE SET NULL;
+ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS supervisor_id INT REFERENCES trabajadores(id) ON DELETE SET NULL;
 
 -- ============================================================
 -- FASE 5 PART 2: VENTAS, RENTABILIDAD & ENVASES
