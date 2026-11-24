@@ -38,7 +38,7 @@ function LayoutContent({
   return (
     <SidebarInset className="min-w-0 max-w-full overflow-x-hidden print:w-full print:m-0 print:p-0 print:border-none print:shadow-none print:overflow-visible print:bg-white print:block">
       {/* Mobile Sticky Header */}
-      <MobileHeader />
+      <MobileHeader onOpenDrawer={onOpenMobileDrawer} />
 
       {/* Desktop Sticky Header (Optimized for 14" Laptops and Desktops) */}
       <header
@@ -79,7 +79,7 @@ function LayoutContent({
       </main>
 
       {/* Bottom Navigation Bar on Mobile */}
-      <BottomNavigationBar onOpenDrawer={onOpenMobileDrawer} />
+      <BottomNavigationBar />
 
       {/* Desktop Footer */}
       <div className="hidden md:block print:hidden">

@@ -972,15 +972,15 @@ function CreateOpportunityContent() {
                     </CardDescription>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={handleAddCustomItem}
-                      className="h-7 text-[11px] px-2 text-emerald-700 border-emerald-400 hover:bg-emerald-50"
+                      className="h-9 sm:h-7 text-xs sm:text-[11px] px-3 text-emerald-700 border-emerald-400 hover:bg-emerald-50 w-full sm:w-auto font-medium"
                     >
-                      <Plus className="size-3 mr-1" />
+                      <Plus className="size-3.5 mr-1" />
                       + Ítem Personalizado
                     </Button>
                   </div>
@@ -988,9 +988,9 @@ function CreateOpportunityContent() {
 
                 {/* Selector rápido desde catálogo con dirección automática */}
                 {products.length > 0 && (
-                  <div className="flex items-center gap-1.5 pt-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-3 border-t mt-2">
                     <select
-                      className="flex-1 h-7 rounded border border-input bg-background px-2 text-[11px] truncate shadow-xs"
+                      className="w-full flex-1 h-10 sm:h-8 rounded-md border border-input bg-background px-3 text-xs shadow-xs font-medium focus:ring-1 focus:ring-emerald-500"
                       value={selectedCatalogId}
                       onChange={(e) => setSelectedCatalogId(e.target.value)}
                     >
@@ -1005,9 +1005,10 @@ function CreateOpportunityContent() {
                       type="button"
                       size="sm"
                       onClick={handleAddCatalogItem}
-                      className="h-7 text-[11px] px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                      className="h-10 sm:h-8 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shrink-0 flex items-center justify-center gap-1.5 shadow-xs w-full sm:w-auto"
                     >
-                      Agregar
+                      <Plus className="size-4 shrink-0" />
+                      <span>Agregar Producto</span>
                     </Button>
                   </div>
                 )}

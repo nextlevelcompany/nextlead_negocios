@@ -786,11 +786,11 @@ export default function OpportunitiesKanbanPage() {
 
           <Button
             size="sm"
-            className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="w-full sm:w-auto order-first sm:order-last h-9 sm:h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
             asChild
           >
             <Link href="/opportunities/create">
-              <Plus className="size-3.5" />
+              <Plus className="size-4" />
               Nueva Oportunidad
             </Link>
           </Button>

@@ -738,10 +738,10 @@ function CreatePedidoContent() {
 
               <CardContent className="p-4 space-y-4">
                 {/* Selector Rápido del Catálogo */}
-                <div className="flex flex-col sm:flex-row items-center gap-2 bg-muted/40 p-2.5 rounded-lg border">
-                  <div className="flex-1 w-full">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-muted/40 p-3 rounded-lg border">
+                  <div className="flex-1 w-full min-w-0">
                     <select
-                      className="w-full h-8 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs"
+                      className="w-full h-10 sm:h-8 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs font-medium focus:ring-1 focus:ring-emerald-500"
                       value={selectedCatalogId}
                       onChange={(e) => setSelectedCatalogId(e.target.value)}
                     >
@@ -763,7 +763,7 @@ function CreatePedidoContent() {
                     <Input
                       type="number"
                       min="1"
-                      className="h-8 w-16 text-center text-xs"
+                      className="h-10 sm:h-8 w-20 text-center text-xs font-semibold"
                       value={selectedCatalogQty}
                       onChange={(e) => setSelectedCatalogQty(Math.max(1, parseInt(e.target.value) || 1))}
                       placeholder="Cant."
@@ -772,17 +772,17 @@ function CreatePedidoContent() {
                       type="button"
                       size="sm"
                       onClick={handleAddCatalogItem}
-                      className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                      className="h-10 sm:h-8 text-xs font-semibold flex-1 sm:flex-initial gap-1.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs shrink-0 flex items-center justify-center"
                     >
-                      <Plus className="size-3.5" />
-                      Agregar
+                      <Plus className="size-4" />
+                      <span>Agregar Producto</span>
                     </Button>
                   </div>
                 </div>
 
                 {/* Tabla de Productos del Pedido */}
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full text-xs">
+                <div className="border rounded-lg overflow-x-auto smooth-scroll">
+                  <table className="w-full text-xs min-w-[520px]">
                     <thead className="bg-muted/60 text-muted-foreground border-b font-semibold">
                       <tr>
                         <th className="py-2 px-3 text-left">Producto / Descripción</th>

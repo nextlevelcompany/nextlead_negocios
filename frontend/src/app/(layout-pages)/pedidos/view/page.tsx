@@ -504,7 +504,7 @@ export default function PedidosViewPage() {
             Actualizar
           </Button>
 
-          <Button size="sm" asChild className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
+          <Button size="sm" asChild className="w-full sm:w-auto order-first sm:order-last h-9 sm:h-8 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs">
             <Link href="/pedidos/create">
               <Plus className="size-4" />
               Nuevo Pedido

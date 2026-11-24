@@ -8,15 +8,11 @@ import {
   MessageSquare,
   Target,
   Receipt,
-  Menu,
+  ShoppingBag,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-interface BottomNavigationBarProps {
-  onOpenDrawer: () => void
-}
-
-export function BottomNavigationBar({ onOpenDrawer }: BottomNavigationBarProps) {
+export function BottomNavigationBar() {
   const pathname = usePathname()
 
   const navItems = [
@@ -43,6 +39,12 @@ export function BottomNavigationBar({ onOpenDrawer }: BottomNavigationBarProps) 
       href: "/ventas/view",
       icon: Receipt,
       isActive: pathname.startsWith("/ventas"),
+    },
+    {
+      label: "Productos",
+      href: "/eCommerce/product-list",
+      icon: ShoppingBag,
+      isActive: pathname.startsWith("/eCommerce") || pathname.startsWith("/productos"),
     },
   ]
 
@@ -75,17 +77,6 @@ export function BottomNavigationBar({ onOpenDrawer }: BottomNavigationBarProps) 
           </Link>
         )
       })}
-
-      {/* Button "Más" opens Drawer */}
-      <button
-        type="button"
-        onClick={onOpenDrawer}
-        aria-label="Abrir menú de navegación completo"
-        className="flex flex-1 flex-col items-center justify-center h-full min-h-[48px] py-1 text-muted-foreground hover:text-foreground transition-colors select-none"
-      >
-        <Menu className="size-5" />
-        <span className="text-[10px] tracking-tight mt-1">Más</span>
-      </button>
     </nav>
   )
 }

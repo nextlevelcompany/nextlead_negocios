@@ -69,9 +69,9 @@ export function CorporateQuoteTable({
   };
 
   return (
-    <div className="w-full overflow-x-auto my-3 rounded-lg border border-slate-300 overflow-hidden bg-white select-text shadow-2xs">
+    <div className="w-full overflow-x-auto my-3 rounded-lg border border-slate-300 overflow-hidden bg-white select-text shadow-2xs smooth-scroll">
       <table
-        className="w-full text-slate-900 border-collapse"
+        className="w-full text-slate-900 border-collapse min-w-[520px]"
         style={{
           fontFamily: "'Segoe UI', Arial, Inter, sans-serif",
           borderCollapse: "collapse",

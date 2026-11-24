@@ -2,13 +2,17 @@
 
 import React, { useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { GlobalSearch } from "@/components/global-search"
 import { NotificationDropdown } from "@/components/notification-dropdown"
 import { UserDropdown } from "@/components/UserDropdown"
 
-export function MobileHeader() {
+interface MobileHeaderProps {
+  onOpenDrawer?: () => void
+}
+
+export function MobileHeader({ onOpenDrawer }: MobileHeaderProps) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -33,7 +37,7 @@ export function MobileHeader() {
     if (pathname.startsWith("/pedidos/create")) return "Nuevo Pedido"
     if (pathname.startsWith("/pedidos")) return "Pedidos"
     if (pathname.startsWith("/applications/chatbox")) return "WhatsApp Chat"
-    if (pathname.startsWith("/eCommerce/product-list")) return "Productos"
+    if (pathname.startsWith("/eCommerce/product-list") || pathname.startsWith("/productos")) return "Productos"
     if (pathname.startsWith("/eCommerce")) return "Catálogo"
     if (pathname.startsWith("/payroll/staff")) return "Personal"
     if (pathname.startsWith("/dashboard")) return "Dashboard"
@@ -69,6 +73,20 @@ export function MobileHeader() {
         <GlobalSearch />
         <NotificationDropdown />
         <UserDropdown />
+        {/* Menú de Opciones en la esquina superior derecha */}
+        {onOpenDrawer && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onOpenDrawer}
+            aria-label="Menú de opciones"
+            className="h-9 w-9 text-muted-foreground hover:text-foreground ml-0.5"
+            title="Abrir menú de opciones"
+          >
+            <Menu className="size-5" />
+          </Button>
+        )}
       </div>
     </header>
   )
