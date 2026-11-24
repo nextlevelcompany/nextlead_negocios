@@ -53,6 +53,13 @@ public class ContactDaoImpl implements ContactDao {
         c.setAiActive(rs.getBoolean("ai_active"));
         c.setReferencia(rs.getString("referencia"));
         c.setStatus(rs.getString("status"));
+        try { int n = rs.getInt("nro_entidades"); c.setNroEntidades(rs.wasNull() ? null : n); } catch (SQLException ignored) {}
+        try { double s = rs.getDouble("score_experian"); c.setScoreExperian(rs.wasNull() ? null : s); } catch (SQLException ignored) {}
+        try { c.setSemaforoExperian(rs.getString("semaforo_experian")); } catch (SQLException ignored) {}
+        try { double d = rs.getDouble("deuda_sbs"); c.setDeudaSbs(rs.wasNull() ? null : d); } catch (SQLException ignored) {}
+        try { c.setCalificacionSbs(rs.getString("calificacion_sbs")); } catch (SQLException ignored) {}
+        try { c.setRangoVentas(rs.getString("rango_ventas")); } catch (SQLException ignored) {}
+        try { c.setCargo(rs.getString("cargo")); } catch (SQLException ignored) {}
         Timestamp ts = rs.getTimestamp("date_created");
         if (ts != null) c.setDateCreated(ts.toLocalDateTime());
         return c;
@@ -132,8 +139,9 @@ public class ContactDaoImpl implements ContactDao {
         String sql = """
             INSERT INTO contacts
               (tipo_persona, tipo_documento, numero_documento, nombres, apellidos,
-               razon_social, telefono_principal, telefono_secundario, email, empresa_id, starred, ai_active, referencia, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               razon_social, telefono_principal, telefono_secundario, email, empresa_id, starred, ai_active, referencia, status,
+               nro_entidades, score_experian, semaforo_experian, deuda_sbs, calificacion_sbs, rango_ventas, cargo)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(con -> {
@@ -156,6 +164,13 @@ public class ContactDaoImpl implements ContactDao {
             ps.setBoolean(12, contact.getAiActive() != null ? contact.getAiActive() : false);
             ps.setString(13, contact.getReferencia());
             ps.setString(14, contact.getStatus() != null ? contact.getStatus() : "Lead");
+            if (contact.getNroEntidades() != null) ps.setInt(15, contact.getNroEntidades()); else ps.setNull(15, java.sql.Types.INTEGER);
+            if (contact.getScoreExperian() != null) ps.setDouble(16, contact.getScoreExperian()); else ps.setNull(16, java.sql.Types.NUMERIC);
+            ps.setString(17, contact.getSemaforoExperian());
+            if (contact.getDeudaSbs() != null) ps.setDouble(18, contact.getDeudaSbs()); else ps.setNull(18, java.sql.Types.NUMERIC);
+            ps.setString(19, contact.getCalificacionSbs());
+            ps.setString(20, contact.getRangoVentas());
+            ps.setString(21, contact.getCargo());
             return ps;
         }, keyHolder);
 
@@ -197,7 +212,8 @@ public class ContactDaoImpl implements ContactDao {
         String sql = """
             UPDATE contacts SET
               tipo_persona = ?, tipo_documento = ?, numero_documento = ?, nombres = ?, apellidos = ?,
-              razon_social = ?, telefono_principal = ?, telefono_secundario = ?, email = ?, empresa_id = ?, ai_active = ?, referencia = ?, status = ?
+              razon_social = ?, telefono_principal = ?, telefono_secundario = ?, email = ?, empresa_id = ?, ai_active = ?, referencia = ?, status = ?,
+              nro_entidades = ?, score_experian = ?, semaforo_experian = ?, deuda_sbs = ?, calificacion_sbs = ?, rango_ventas = ?, cargo = ?
             WHERE id = ?
             """;
         jdbcTemplate.update(sql,
@@ -214,6 +230,13 @@ public class ContactDaoImpl implements ContactDao {
             contact.getAiActive(),
             contact.getReferencia(),
             contact.getStatus() != null ? contact.getStatus() : "Lead",
+            contact.getNroEntidades(),
+            contact.getScoreExperian(),
+            contact.getSemaforoExperian(),
+            contact.getDeudaSbs(),
+            contact.getCalificacionSbs(),
+            contact.getRangoVentas(),
+            contact.getCargo(),
             contact.getId()
         );
 
@@ -324,5 +347,58 @@ public class ContactDaoImpl implements ContactDao {
         } catch (Exception e) {
             return Optional.empty();
         }
+    }
+
+    @Override
+    public java.util.Map<String, Object> findPaginated(int page, int size, String search, String tipoPersona, String semaforo) {
+        StringBuilder where = new StringBuilder(" WHERE 1=1 ");
+        List<Object> params = new java.util.ArrayList<>();
+
+        if (search != null && !search.isBlank()) {
+            String pattern = "%" + search.trim().toLowerCase() + "%";
+            where.append(" AND (LOWER(c.razon_social) LIKE ? OR LOWER(c.nombres) LIKE ? OR LOWER(c.apellidos) LIKE ? OR c.numero_documento LIKE ? OR c.telefono_principal LIKE ? OR LOWER(c.email) LIKE ?) ");
+            params.add(pattern);
+            params.add(pattern);
+            params.add(pattern);
+            params.add(pattern);
+            params.add(pattern);
+            params.add(pattern);
+        }
+
+        if (tipoPersona != null && !tipoPersona.isBlank() && !"ALL".equalsIgnoreCase(tipoPersona)) {
+            where.append(" AND c.tipo_persona = ? ");
+            params.add(tipoPersona.toUpperCase());
+        }
+
+        if (semaforo != null && !semaforo.isBlank() && !"ALL".equalsIgnoreCase(semaforo)) {
+            where.append(" AND UPPER(c.semaforo_experian) = ? ");
+            params.add(semaforo.toUpperCase());
+        }
+
+        // Count query
+        String countSql = "SELECT COUNT(*) FROM contacts c " + where;
+        Long totalElements = jdbcTemplate.queryForObject(countSql, Long.class, params.toArray());
+        if (totalElements == null) totalElements = 0L;
+
+        // Data query with limit & offset
+        int offset = Math.max(0, page) * size;
+        String dataSql = "SELECT c.*, e.razon_social AS empresa_nombre FROM contacts c LEFT JOIN contacts e ON c.empresa_id = e.id "
+                + where
+                + " ORDER BY c.id DESC LIMIT ? OFFSET ?";
+        List<Object> dataParams = new java.util.ArrayList<>(params);
+        dataParams.add(size);
+        dataParams.add(offset);
+
+        List<Contact> content = jdbcTemplate.query(dataSql, contactRowMapper, dataParams.toArray());
+
+        int totalPages = (int) Math.ceil((double) totalElements / size);
+
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("content", content);
+        result.put("totalElements", totalElements);
+        result.put("totalPages", totalPages);
+        result.put("page", page);
+        result.put("size", size);
+        return result;
     }
 }

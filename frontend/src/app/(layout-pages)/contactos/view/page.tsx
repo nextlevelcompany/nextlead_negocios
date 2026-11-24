@@ -140,6 +140,13 @@ interface Contact {
   aiActive?: boolean;
   dateCreated?: string;
   referencia?: string | null;
+  nroEntidades?: number | null;
+  scoreExperian?: number | null;
+  semaforoExperian?: string | null;
+  deudaSbs?: number | null;
+  calificacionSbs?: string | null;
+  rangoVentas?: string | null;
+  cargo?: string | null;
   direcciones?: Direccion[];
 }
 
@@ -1083,12 +1090,44 @@ function ContactDetailViewContent() {
             </div>
 
             <div className="flex flex-col min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground truncate">
                   {displayName}
                 </h2>
                 {contact.starred && (
                   <Star className="size-4 fill-amber-400 text-amber-500 shrink-0" />
+                )}
+                {contact.cargo && (
+                  <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-300">
+                    {contact.cargo}
+                  </Badge>
+                )}
+                {isEmpresa && contact.semaforoExperian && (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs font-semibold px-2 py-0.5 gap-1.5 border shrink-0 ${
+                      contact.semaforoExperian === "VERDE"
+                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-300"
+                        : contact.semaforoExperian === "AMARILLO"
+                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-300"
+                        : contact.semaforoExperian === "ROJO"
+                        ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-300"
+                        : "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`size-2 rounded-full shrink-0 ${
+                        contact.semaforoExperian === "VERDE"
+                          ? "bg-emerald-500"
+                          : contact.semaforoExperian === "AMARILLO"
+                          ? "bg-amber-500"
+                          : contact.semaforoExperian === "ROJO"
+                          ? "bg-rose-500"
+                          : "bg-slate-400"
+                      }`}
+                    />
+                    <span>Semáforo: {contact.semaforoExperian}</span>
+                  </Badge>
                 )}
               </div>
 
@@ -1256,6 +1295,51 @@ function ContactDetailViewContent() {
               </div>
             </div>
           </div>
+
+          {/* Experian & SBS Financial Profile */}
+          {isEmpresa && contact.semaforoExperian && (
+            <div className="bg-muted/40 rounded-lg p-3 border flex flex-col gap-2.5 text-xs sm:text-sm">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Receipt className="size-3.5 text-emerald-600" />
+                  Perfil Financiero & Riesgo Crediticio (Experian / SBS)
+                </span>
+                {contact.scoreExperian != null && (
+                  <Badge variant="outline" className="font-mono text-xs">
+                    Score: {contact.scoreExperian.toFixed(4)}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                <div className="bg-card p-2.5 rounded border flex flex-col">
+                  <span className="text-[10px] text-muted-foreground uppercase font-medium">Calificación SBS</span>
+                  <span className="text-sm font-bold text-foreground mt-0.5">{contact.calificacionSbs || "NORMAL"}</span>
+                </div>
+
+                <div className="bg-card p-2.5 rounded border flex flex-col">
+                  <span className="text-[10px] text-muted-foreground uppercase font-medium">Deuda Total SBS</span>
+                  <span className="text-sm font-bold text-rose-600 dark:text-rose-400 mt-0.5 font-mono">
+                    S/ {contact.deudaSbs != null ? contact.deudaSbs.toLocaleString() : "0.00"}
+                  </span>
+                </div>
+
+                <div className="bg-card p-2.5 rounded border flex flex-col">
+                  <span className="text-[10px] text-muted-foreground uppercase font-medium">Rango de Ventas</span>
+                  <span className="text-xs font-medium text-foreground mt-0.5 font-mono truncate" title={contact.rangoVentas || ""}>
+                    {contact.rangoVentas || "-"}
+                  </span>
+                </div>
+
+                <div className="bg-card p-2.5 rounded border flex flex-col">
+                  <span className="text-[10px] text-muted-foreground uppercase font-medium">Nro Entidades</span>
+                  <span className="text-sm font-bold text-foreground mt-0.5 font-mono">
+                    {contact.nroEntidades != null ? contact.nroEntidades : 0} entidades
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ----------------------------------------------------------------- */}
           {/* BLOQUE INFERIOR CON PESTAÑAS (NOTEBOOK ESTILO ODOO) */}

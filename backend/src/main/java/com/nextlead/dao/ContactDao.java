@@ -22,4 +22,5 @@ public interface ContactDao {
     List<Contact> findPersonasByEmpresaId(Long empresaId);
     List<Ubigeo> findAllUbigeos();
     long count();
+    java.util.Map<String, Object> findPaginated(int page, int size, String search, String tipoPersona, String semaforo);
 }

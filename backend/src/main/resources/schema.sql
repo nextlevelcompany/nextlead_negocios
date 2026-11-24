@@ -88,6 +88,22 @@ CREATE TABLE IF NOT EXISTS direcciones (
 -- Asegurar columna empresa_id si la tabla ya existía sin ella
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS empresa_id BIGINT REFERENCES contacts(id) ON DELETE SET NULL;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS referencia VARCHAR(250);
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS nro_entidades INTEGER;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS score_experian NUMERIC(10,4);
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS semaforo_experian VARCHAR(20);
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS deuda_sbs NUMERIC(14,2);
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS calificacion_sbs VARCHAR(50);
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS rango_ventas VARCHAR(100);
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS cargo VARCHAR(100);
+ALTER TABLE contacts ALTER COLUMN tipo_documento DROP NOT NULL;
+ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_tipo_documento_check;
+
+CREATE INDEX IF NOT EXISTS idx_contacts_tipo_persona ON contacts(tipo_persona);
+CREATE INDEX IF NOT EXISTS idx_contacts_numero_doc ON contacts(numero_documento);
+CREATE INDEX IF NOT EXISTS idx_contacts_telefono ON contacts(telefono_principal);
+CREATE INDEX IF NOT EXISTS idx_contacts_empresa_id ON contacts(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_semaforo ON contacts(semaforo_experian);
+CREATE INDEX IF NOT EXISTS idx_direcciones_id_contacto ON direcciones(id_contacto);
 
 -- Tabla para almacenar configuraciones dinámicas de la aplicación (como credenciales de Meta y Gemini)
 CREATE TABLE IF NOT EXISTS system_settings (

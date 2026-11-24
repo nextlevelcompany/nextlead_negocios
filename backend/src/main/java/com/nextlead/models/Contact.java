@@ -27,6 +27,14 @@ public class Contact {
     private LocalDateTime dateCreated;
     private String referencia;
     private String status = "Lead";
+    // Experian & Finanzas
+    private Integer nroEntidades;
+    private Double scoreExperian;
+    private String semaforoExperian;
+    private Double deudaSbs;
+    private String calificacionSbs;
+    private String rangoVentas;
+    private String cargo;
     // Relación 1-N con direcciones
     private List<Direccion> direcciones = new ArrayList<>();
 
@@ -93,4 +101,25 @@ public class Contact {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public Integer getNroEntidades() { return nroEntidades; }
+    public void setNroEntidades(Integer nroEntidades) { this.nroEntidades = nroEntidades; }
+
+    public Double getScoreExperian() { return scoreExperian; }
+    public void setScoreExperian(Double scoreExperian) { this.scoreExperian = scoreExperian; }
+
+    public String getSemaforoExperian() { return semaforoExperian; }
+    public void setSemaforoExperian(String semaforoExperian) { this.semaforoExperian = semaforoExperian; }
+
+    public Double getDeudaSbs() { return deudaSbs; }
+    public void setDeudaSbs(Double deudaSbs) { this.deudaSbs = deudaSbs; }
+
+    public String getCalificacionSbs() { return calificacionSbs; }
+    public void setCalificacionSbs(String calificacionSbs) { this.calificacionSbs = calificacionSbs; }
+
+    public String getRangoVentas() { return rangoVentas; }
+    public void setRangoVentas(String rangoVentas) { this.rangoVentas = rangoVentas; }
+
+    public String getCargo() { return cargo; }
+    public void setCargo(String cargo) { this.cargo = cargo; }
 }

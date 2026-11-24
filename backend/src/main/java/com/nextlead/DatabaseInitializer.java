@@ -291,6 +291,23 @@ public class DatabaseInitializer implements CommandLineRunner {
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(50) DEFAULT 'Administrador'",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(50) DEFAULT 'General'",
 
+            // Contactos - Experian y Finanzas
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS nro_entidades INTEGER",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS score_experian NUMERIC(10,4)",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS semaforo_experian VARCHAR(20)",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS deuda_sbs NUMERIC(14,2)",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS calificacion_sbs VARCHAR(50)",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS rango_ventas VARCHAR(100)",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS cargo VARCHAR(100)",
+            "ALTER TABLE contacts ALTER COLUMN tipo_documento DROP NOT NULL",
+            "ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_tipo_documento_check",
+            "CREATE INDEX IF NOT EXISTS idx_contacts_tipo_persona ON contacts(tipo_persona)",
+            "CREATE INDEX IF NOT EXISTS idx_contacts_numero_doc ON contacts(numero_documento)",
+            "CREATE INDEX IF NOT EXISTS idx_contacts_telefono ON contacts(telefono_principal)",
+            "CREATE INDEX IF NOT EXISTS idx_contacts_empresa_id ON contacts(empresa_id)",
+            "CREATE INDEX IF NOT EXISTS idx_contacts_semaforo ON contacts(semaforo_experian)",
+            "CREATE INDEX IF NOT EXISTS idx_direcciones_id_contacto ON direcciones(id_contacto)",
+
             // Trabajadores
             "ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS equipo VARCHAR(100)",
             "ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS supervisor_id BIGINT REFERENCES trabajadores(id) ON DELETE SET NULL",

@@ -97,6 +97,13 @@ interface Contact {
   dateCreated?: string;
   referencia?: string | null;
   status?: string;
+  nroEntidades?: number | null;
+  scoreExperian?: number | null;
+  semaforoExperian?: string | null;
+  deudaSbs?: number | null;
+  calificacionSbs?: string | null;
+  rangoVentas?: string | null;
+  cargo?: string | null;
   direcciones?: Direccion[];
 }
 
@@ -107,9 +114,28 @@ export default function ContactsDirectoryPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | "NATURAL" | "EMPRESA">("ALL");
+  const [filterSemaforo, setFilterSemaforo] = useState<string>("ALL");
   const [filterStarred, setFilterStarred] = useState(false);
   const [filterAi, setFilterAi] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+
+  // Pagination State
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(24);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  // Global KPI Stats
+  const [stats, setStats] = useState({
+    total: 0,
+    empresas: 0,
+    naturales: 0,
+    ai_active: 0,
+    semaforo_verde: 0,
+    semaforo_amarillo: 0,
+    semaforo_rojo: 0,
+    semaforo_gris: 0,
+  });
 
   // Detail Modal State
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -117,12 +143,38 @@ export default function ContactsDirectoryPage() {
   const [contactOrders, setContactOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
 
-  // Load Contacts from API
+  // Load KPI Stats from Backend
+  const loadStats = async () => {
+    try {
+      const res = await api.get("/api/contacts/stats");
+      if (res.data) setStats(res.data);
+    } catch (e) {
+      console.error("Error loading stats:", e);
+    }
+  };
+
+  // Load Contacts from Paginated API
   const loadContacts = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/api/contacts");
-      setContacts(Array.isArray(res.data) ? res.data : []);
+      const res = await api.get("/api/contacts/paginated", {
+        params: {
+          page,
+          size: pageSize,
+          search: searchTerm.trim() || undefined,
+          tipoPersona: filterType !== "ALL" ? filterType : undefined,
+          semaforo: filterSemaforo !== "ALL" ? filterSemaforo : undefined,
+        },
+      });
+      if (res.data && res.data.content) {
+        setContacts(res.data.content);
+        setTotalElements(res.data.totalElements || 0);
+        setTotalPages(res.data.totalPages || 0);
+      } else if (Array.isArray(res.data)) {
+        setContacts(res.data);
+        setTotalElements(res.data.length);
+        setTotalPages(1);
+      }
     } catch (err: any) {
       console.error("Error loading contacts:", err);
       toast.error(err.response?.data?.message || "Error al cargar la lista de contactos.");
@@ -132,42 +184,28 @@ export default function ContactsDirectoryPage() {
   };
 
   useEffect(() => {
-    loadContacts();
+    setPage(0);
+  }, [searchTerm, filterType, filterSemaforo]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      loadContacts();
+    }, 200);
+    return () => clearTimeout(handler);
+  }, [page, pageSize, searchTerm, filterType, filterSemaforo]);
+
+  useEffect(() => {
+    loadStats();
   }, []);
 
-  // Filter Contacts
+  // Filter Contacts for Client-side Toggles (Starred / AI)
   const filteredContacts = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
-
     return contacts.filter((c) => {
-      const displayName = (
-        c.tipoPersona === "NATURAL"
-          ? `${c.nombres || ""} ${c.apellidos || ""}`
-          : c.razonSocial || ""
-      ).toLowerCase();
-
-      const matchTerm =
-        !term ||
-        displayName.includes(term) ||
-        (c.numeroDocumento && c.numeroDocumento.includes(term)) ||
-        (c.telefonoPrincipal && c.telefonoPrincipal.includes(term)) ||
-        (c.telefonoSecundario && c.telefonoSecundario.includes(term)) ||
-        (c.email && c.email.toLowerCase().includes(term)) ||
-        (c.empresaNombre && c.empresaNombre.toLowerCase().includes(term)) ||
-        (c.direcciones &&
-          c.direcciones.some(
-            (d) =>
-              (d.direccionCompleta && d.direccionCompleta.toLowerCase().includes(term)) ||
-              (d.distrito && d.distrito.toLowerCase().includes(term))
-          ));
-
-      const matchType = filterType === "ALL" || c.tipoPersona === filterType;
       const matchStarred = !filterStarred || !!c.starred;
       const matchAi = !filterAi || !!c.aiActive;
-
-      return matchTerm && matchType && matchStarred && matchAi;
+      return matchStarred && matchAi;
     });
-  }, [contacts, searchTerm, filterType, filterStarred, filterAi]);
+  }, [contacts, filterStarred, filterAi]);
 
   // Star Toggle
   const handleToggleStar = async (contact: Contact, e?: React.MouseEvent) => {
@@ -244,6 +282,39 @@ export default function ContactsDirectoryPage() {
     window.open(`https://wa.me/${formatted}`, "_blank");
   };
 
+  // Helper render Semáforo Experian
+  const renderSemaforoBadge = (semaforo?: string | null, score?: number | null) => {
+    if (!semaforo) return null;
+    const s = semaforo.toUpperCase();
+    let bg = "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700";
+    let dot = "bg-slate-400";
+    let label = "Gris";
+
+    if (s === "VERDE") {
+      bg = "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700";
+      dot = "bg-emerald-500";
+      label = "Verde";
+    } else if (s === "AMARILLO") {
+      bg = "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700";
+      dot = "bg-amber-500";
+      label = "Amarillo";
+    } else if (s === "ROJO") {
+      bg = "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-700";
+      dot = "bg-rose-500";
+      label = "Rojo";
+    }
+
+    return (
+      <Badge variant="outline" className={`text-[10px] font-medium px-2 py-0.5 gap-1.5 border shrink-0 ${bg}`}>
+        <span className={`size-1.5 rounded-full shrink-0 ${dot}`} />
+        <span>{label}</span>
+        {score !== undefined && score !== null && (
+          <span className="opacity-75 font-mono text-[9px]">({score.toFixed(3)})</span>
+        )}
+      </Badge>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4 w-full max-w-full min-w-0">
       {/* Top Header */}
@@ -312,8 +383,10 @@ export default function ContactsDirectoryPage() {
             <span className="text-xs sm:text-sm font-medium text-muted-foreground">Total Contactos</span>
             <Users className="size-4 sm:size-5 text-emerald-600" />
           </div>
-          <div className="text-xl sm:text-2xl font-bold mt-1 text-foreground">{contacts.length}</div>
-          <p className="text-xs text-muted-foreground mt-0.5">Base de clientes</p>
+          <div className="text-xl sm:text-2xl font-bold mt-1 text-foreground">
+            {stats.total > 0 ? stats.total.toLocaleString() : totalElements.toLocaleString()}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">Base global de clientes</p>
         </Card>
 
         <Card className="bg-card shadow-xs p-3.5">
@@ -322,7 +395,7 @@ export default function ContactsDirectoryPage() {
             <Building className="size-4 sm:size-5 text-blue-600" />
           </div>
           <div className="text-xl sm:text-2xl font-bold mt-1 text-blue-600">
-            {contacts.filter((c) => c.tipoPersona === "EMPRESA").length}
+            {stats.empresas > 0 ? stats.empresas.toLocaleString() : "-"}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">Cuentas corporativas</p>
         </Card>
@@ -333,9 +406,9 @@ export default function ContactsDirectoryPage() {
             <User className="size-4 sm:size-5 text-amber-500" />
           </div>
           <div className="text-xl sm:text-2xl font-bold mt-1 text-amber-600">
-            {contacts.filter((c) => c.tipoPersona === "NATURAL").length}
+            {stats.naturales > 0 ? stats.naturales.toLocaleString() : "-"}
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">Clientes particulares</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Representantes & contactos</p>
         </Card>
 
         <Card className="bg-card shadow-xs p-3.5">
@@ -344,20 +417,20 @@ export default function ContactsDirectoryPage() {
             <Bot className="size-4 sm:size-5 text-indigo-500" />
           </div>
           <div className="text-xl sm:text-2xl font-bold mt-1 text-indigo-600">
-            {contacts.filter((c) => c.aiActive).length}
+            {stats.ai_active}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">Auto-respuesta WhatsApp</p>
         </Card>
       </div>
 
       {/* Filter and Search Bar */}
-      <Card className="bg-card p-3 shadow-xs w-full max-w-full min-w-0">
+      <Card className="bg-card p-3 shadow-xs w-full max-w-full min-w-0 flex flex-col gap-2.5">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
           {/* Search Input */}
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nombre, documento, teléfono, empresa o dirección..."
+              placeholder="Buscar por RUC, razón social, nombre RL, teléfono o email..."
               className="pl-9 h-9 text-xs sm:text-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -411,6 +484,55 @@ export default function ContactsDirectoryPage() {
               IA Activa
             </Button>
           </div>
+        </div>
+
+        {/* Semáforo Experian Filter Bar */}
+        <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t">
+          <span className="text-xs font-medium text-muted-foreground mr-1">Riesgo Experian:</span>
+          <Button
+            variant={filterSemaforo === "ALL" ? "default" : "outline"}
+            size="sm"
+            className="h-7 text-xs px-2.5"
+            onClick={() => setFilterSemaforo("ALL")}
+          >
+            Todos
+          </Button>
+          <Button
+            variant={filterSemaforo === "VERDE" ? "default" : "outline"}
+            size="sm"
+            className={`h-7 text-xs px-2.5 gap-1.5 ${filterSemaforo === "VERDE" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"}`}
+            onClick={() => setFilterSemaforo("VERDE")}
+          >
+            <span className="size-2 rounded-full bg-emerald-500" />
+            Verde ({stats.semaforo_verde ? stats.semaforo_verde.toLocaleString() : 0})
+          </Button>
+          <Button
+            variant={filterSemaforo === "AMARILLO" ? "default" : "outline"}
+            size="sm"
+            className={`h-7 text-xs px-2.5 gap-1.5 ${filterSemaforo === "AMARILLO" ? "bg-amber-500 text-white hover:bg-amber-600" : "text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800"}`}
+            onClick={() => setFilterSemaforo("AMARILLO")}
+          >
+            <span className="size-2 rounded-full bg-amber-500" />
+            Amarillo ({stats.semaforo_amarillo ? stats.semaforo_amarillo.toLocaleString() : 0})
+          </Button>
+          <Button
+            variant={filterSemaforo === "ROJO" ? "default" : "outline"}
+            size="sm"
+            className={`h-7 text-xs px-2.5 gap-1.5 ${filterSemaforo === "ROJO" ? "bg-rose-600 text-white hover:bg-rose-700" : "text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-800"}`}
+            onClick={() => setFilterSemaforo("ROJO")}
+          >
+            <span className="size-2 rounded-full bg-rose-500" />
+            Rojo ({stats.semaforo_rojo ? stats.semaforo_rojo.toLocaleString() : 0})
+          </Button>
+          <Button
+            variant={filterSemaforo === "GRIS" ? "default" : "outline"}
+            size="sm"
+            className={`h-7 text-xs px-2.5 gap-1.5 ${filterSemaforo === "GRIS" ? "bg-slate-600 text-white hover:bg-slate-700" : "text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700"}`}
+            onClick={() => setFilterSemaforo("GRIS")}
+          >
+            <span className="size-2 rounded-full bg-slate-400" />
+            Gris ({stats.semaforo_gris ? stats.semaforo_gris.toLocaleString() : 0})
+          </Button>
         </div>
       </Card>
 
@@ -578,6 +700,25 @@ export default function ContactsDirectoryPage() {
                       <span className="truncate text-foreground font-medium">{contact.empresaNombre}</span>
                     </div>
                   )}
+
+                  {/* Experian Risk Info & Cargo */}
+                  <div className="flex items-center justify-between gap-1 flex-wrap pt-0.5">
+                    {isEmpresa && contact.semaforoExperian && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {renderSemaforoBadge(contact.semaforoExperian, contact.scoreExperian)}
+                        {contact.deudaSbs != null && contact.deudaSbs > 0 && (
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            Deuda: S/ {contact.deudaSbs.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {!isEmpresa && contact.cargo && (
+                      <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-300">
+                        {contact.cargo}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
 
                 {/* Footer: Tags & Badges */}
@@ -625,6 +766,7 @@ export default function ContactsDirectoryPage() {
                   <TableHead className="w-10 text-center"></TableHead>
                   <TableHead className="text-xs sm:text-sm">Nombre / Razón Social</TableHead>
                   <TableHead className="text-xs sm:text-sm">Tipo / Documento</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Riesgo / Cargo</TableHead>
                   <TableHead className="text-xs sm:text-sm">Teléfono</TableHead>
                   <TableHead className="text-xs sm:text-sm">Dirección Principal</TableHead>
                   <TableHead className="text-xs sm:text-sm">IA Bot</TableHead>
@@ -690,6 +832,17 @@ export default function ContactsDirectoryPage() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        {isEmpresa && contact.semaforoExperian ? (
+                          renderSemaforoBadge(contact.semaforoExperian, contact.scoreExperian)
+                        ) : !isEmpresa && contact.cargo ? (
+                          <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-300">
+                            {contact.cargo}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center gap-1.5 font-mono text-xs sm:text-sm">
                           <span>{contact.telefonoPrincipal}</span>
                           <Button
@@ -753,6 +906,60 @@ export default function ContactsDirectoryPage() {
             </Table>
             </div>
           </CardContent>
+        </Card>
+      )}
+
+      {/* Pagination Bar */}
+      {!loading && totalElements > 0 && (
+        <Card className="bg-card p-3 shadow-xs w-full max-w-full min-w-0">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs sm:text-sm text-muted-foreground">
+              Mostrando <span className="font-semibold text-foreground">{page * pageSize + 1}</span> a{" "}
+              <span className="font-semibold text-foreground">{Math.min((page + 1) * pageSize, totalElements).toLocaleString()}</span> de{" "}
+              <span className="font-semibold text-foreground">{totalElements.toLocaleString()}</span> contactos
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs px-3"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0 || loading}
+              >
+                Anterior
+              </Button>
+
+              <div className="text-xs text-muted-foreground px-2">
+                Pág. <span className="font-semibold text-foreground">{page + 1}</span> de{" "}
+                <span className="font-semibold text-foreground">{totalPages || 1}</span>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs px-3"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={page + 1 >= totalPages || loading}
+              >
+                Siguiente
+              </Button>
+
+              <select
+                className="h-8 text-xs border rounded-md px-2 bg-background text-foreground ml-2"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(0);
+                }}
+              >
+                <option value={12}>12 por pág.</option>
+                <option value={24}>24 por pág.</option>
+                <option value={48}>48 por pág.</option>
+                <option value={100}>100 por pág.</option>
+              </select>
+            </div>
+          </div>
         </Card>
       )}
 

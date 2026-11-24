@@ -26,10 +26,48 @@ public class ContactController {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    // GET /api/contacts — Todos los contactos
+    // GET /api/contacts/stats — KPIs agregados de contactos y semáforos Experian
+    @GetMapping("/stats")
+    public ResponseEntity<?> getStats() {
+        String sql = """
+            SELECT
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE tipo_persona = 'EMPRESA') as empresas,
+                COUNT(*) FILTER (WHERE tipo_persona = 'NATURAL') as naturales,
+                COUNT(*) FILTER (WHERE ai_active = true) as ai_active,
+                COUNT(*) FILTER (WHERE UPPER(semaforo_experian) = 'VERDE') as semaforo_verde,
+                COUNT(*) FILTER (WHERE UPPER(semaforo_experian) = 'AMARILLO') as semaforo_amarillo,
+                COUNT(*) FILTER (WHERE UPPER(semaforo_experian) = 'ROJO') as semaforo_rojo,
+                COUNT(*) FILTER (WHERE UPPER(semaforo_experian) = 'GRIS') as semaforo_gris
+            FROM contacts;
+            """;
+        return ResponseEntity.ok(jdbcTemplate.queryForMap(sql));
+    }
+
+    // GET /api/contacts — Todos los contactos (soporta paginación o listado directo)
     @GetMapping
-    public ResponseEntity<List<Contact>> getAll() {
+    public ResponseEntity<?> getAll(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String tipoPersona,
+            @RequestParam(required = false) String semaforo) {
+        if (page != null) {
+            int pageSize = (size != null && size > 0) ? size : 20;
+            return ResponseEntity.ok(contactDao.findPaginated(page, pageSize, search, tipoPersona, semaforo));
+        }
         return ResponseEntity.ok(contactDao.findAll());
+    }
+
+    // GET /api/contacts/paginated — Paginación explícita optimizada para 50k+ registros
+    @GetMapping("/paginated")
+    public ResponseEntity<?> getPaginated(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String tipoPersona,
+            @RequestParam(required = false) String semaforo) {
+        return ResponseEntity.ok(contactDao.findPaginated(page, size, search, tipoPersona, semaforo));
     }
 
     // GET /api/contacts/search?phone={phone} — Buscar contacto por teléfono
@@ -75,7 +113,7 @@ public class ContactController {
     }
 
     // GET /api/contacts/{id} — Contacto por ID
-    @GetMapping("/{id}")
+    @GetMapping("/{id:[0-9]+}")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         Optional<Contact> opt = contactDao.findById(id);
         if (opt.isPresent()) {
