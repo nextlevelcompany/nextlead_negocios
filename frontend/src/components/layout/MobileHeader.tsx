@@ -37,9 +37,14 @@ export function MobileHeader({ onOpenDrawer }: MobileHeaderProps) {
     if (pathname.startsWith("/pedidos/create")) return "Nuevo Pedido"
     if (pathname.startsWith("/pedidos")) return "Pedidos"
     if (pathname.startsWith("/applications/chatbox")) return "WhatsApp Chat"
-    if (pathname.startsWith("/eCommerce/product-list") || pathname.startsWith("/productos")) return "Productos"
-    if (pathname.startsWith("/eCommerce")) return "Catálogo"
-    if (pathname.startsWith("/payroll/staff")) return "Personal"
+    if (pathname.startsWith("/productos/categorias")) return "Categorías"
+    if (pathname.startsWith("/productos")) return "Catálogo de Productos"
+    if (pathname.startsWith("/finanzas")) return "Finanzas"
+    if (pathname.startsWith("/rentabilidad")) return "Rentabilidad & Comisiones"
+    if (pathname.startsWith("/payroll")) return "Personal"
+    if (pathname.startsWith("/admin")) return "Ajustes del Sistema"
+    if (pathname.startsWith("/soporte")) return "Soporte"
+    if (pathname.startsWith("/docs")) return "Documentación"
     if (pathname.startsWith("/dashboard")) return "Dashboard"
     
     // Fallback: capitalize last segment

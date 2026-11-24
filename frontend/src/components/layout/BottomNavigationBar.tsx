@@ -8,7 +8,7 @@ import {
   MessageSquare,
   Target,
   Receipt,
-  ShoppingBag,
+  Boxes,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -42,9 +42,9 @@ export function BottomNavigationBar() {
     },
     {
       label: "Productos",
-      href: "/eCommerce/product-list",
-      icon: ShoppingBag,
-      isActive: pathname.startsWith("/eCommerce") || pathname.startsWith("/productos"),
+      href: "/productos/view",
+      icon: Boxes,
+      isActive: pathname.startsWith("/productos"),
     },
   ]
 
