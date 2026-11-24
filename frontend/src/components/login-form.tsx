@@ -99,14 +99,13 @@ export function LoginForm({
         if (err.response.status === 401) {
           setErrorMessage("Credenciales incorrectas. Verifica que el usuario y la contraseña sean válidos.")
         } else {
-          setErrorMessage(
-            typeof err.response.data === "string"
-              ? err.response.data
-              : err.response.data?.message || "Error al procesar la autenticación."
-          )
+          const detail = typeof err.response.data === "string"
+            ? err.response.data
+            : err.response.data?.message || err.message || "Error al procesar la autenticación."
+          setErrorMessage(detail)
         }
       } else {
-        setErrorMessage("No se pudo conectar con el servidor de autenticación (puerto 8081).")
+        setErrorMessage("No se pudo conectar con el servidor de autenticación.")
       }
       toast.error("Acceso denegado")
     } finally {

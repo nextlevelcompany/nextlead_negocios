@@ -13,31 +13,33 @@ ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS wamid VARCHAR(100);
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(100) NOT NULL,
+    password VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL,
-    first_name VARCHAR(50) DEFAULT 'Kate',
-    last_name VARCHAR(50) DEFAULT 'Jones',
-    location VARCHAR(100) DEFAULT 'Lane no 1, Newyork',
+    first_name VARCHAR(50) DEFAULT 'Administrador',
+    last_name VARCHAR(50) DEFAULT 'General',
+    location VARCHAR(100) DEFAULT 'Lima, Perú',
     bio TEXT DEFAULT '',
-    phone VARCHAR(20) DEFAULT 'xxxxxxx987',
-    website VARCHAR(100) DEFAULT 'hencework.com',
-    avatar TEXT
+    phone VARCHAR(20) DEFAULT '',
+    website VARCHAR(100) DEFAULT '',
+    avatar TEXT,
+    modules TEXT DEFAULT 'dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin'
 );
 
--- Insertar usuario admin por defecto (username: admin, password: admin123)
--- El hash corresponde a 'admin123' usando BCrypt
-INSERT INTO users (username, password, role)
-VALUES ('admin', '$2a$06$RKnjshpZGEaGkvrYzts.POcOfm3atYZ9eH2ku44hmLy6ryrOC7hPq', 'ADMIN')
-ON CONFLICT (username) DO NOTHING;
-
--- Asegurar que las columnas del perfil existan si la tabla ya había sido creada sin ellas
-ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(50) DEFAULT 'Kate';
-ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(50) DEFAULT 'Jones';
-ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(100) DEFAULT 'Lane no 1, Newyork';
+-- Asegurar que las columnas existan si la tabla ya había sido creada sin ellas
+ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(50) DEFAULT 'Administrador';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(50) DEFAULT 'General';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(100) DEFAULT 'Lima, Perú';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT '';
-ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20) DEFAULT 'xxxxxxx987';
-ALTER TABLE users ADD COLUMN IF NOT EXISTS website VARCHAR(100) DEFAULT 'hencework.com';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20) DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS website VARCHAR(100) DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS modules TEXT DEFAULT 'dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin';
+ALTER TABLE users ALTER COLUMN password TYPE VARCHAR(255);
+
+-- Insertar o actualizar usuario admin por defecto
+INSERT INTO users (username, password, role, first_name, last_name, modules)
+VALUES ('admin', '$2a$10$wN2Jm8E8L5qjPjA1zH3rQ.uHjYgHkl4F7zDkR8v0O2dF9yP1kC6xW', 'ADMIN', 'Administrador', 'General', 'dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin')
+ON CONFLICT (username) DO UPDATE SET modules = EXCLUDED.modules;
 
 
 -- ============================================================

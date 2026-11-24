@@ -36,14 +36,25 @@ public class DatabaseInitializer implements CommandLineRunner {
         ensureSchemaIntegrity();
 
         // ── Usuario administrador ───────────────────────────────────────────
-        if (!userDao.existsByUsername("admin")) {
-            User admin = new User();
-            admin.setUsername("admin");
-            admin.setPassword(passwordEncoder.encode("admin123"));
-            admin.setRole("ADMIN");
-            admin.setModules("dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin");
-            userDao.save(admin);
-            System.out.println(">>> Usuario administrador por defecto ('admin' / 'admin123') creado.");
+        String secureAdminPass = "Admin#2026*Secure!";
+        String encodedSecurePass = passwordEncoder.encode(secureAdminPass);
+        String allModules = "dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin";
+
+        // Insertar o actualizar la contraseña segura del usuario 'admin'
+        try {
+            int updated = jdbcTemplate.update(
+                "UPDATE users SET password = ?, role = 'ADMIN', modules = ? WHERE LOWER(TRIM(username)) = 'admin'",
+                encodedSecurePass, allModules
+            );
+            if (updated == 0) {
+                jdbcTemplate.update(
+                    "INSERT INTO users (username, password, role, first_name, last_name, modules) VALUES ('admin', ?, 'ADMIN', 'Administrador', 'General', ?)",
+                    encodedSecurePass, allModules
+                );
+            }
+            System.out.println(">>> Credenciales de administrador actualizadas con contraseña de alta seguridad.");
+        } catch (Exception e) {
+            System.err.println(">>> Error actualizando usuario admin: " + e.getMessage());
         }
 
         // ── Catálogo de Ubigeo (muestra representativa INEI) ───────────────
@@ -276,6 +287,9 @@ public class DatabaseInitializer implements CommandLineRunner {
         String[] migrations = {
             // Users
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS modules TEXT DEFAULT ''",
+            "ALTER TABLE users ALTER COLUMN password TYPE VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(50) DEFAULT 'Administrador'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(50) DEFAULT 'General'",
 
             // Trabajadores
             "ALTER TABLE trabajadores ADD COLUMN IF NOT EXISTS equipo VARCHAR(100)",

@@ -29,44 +29,74 @@ public class UserDaoImpl implements UserDao {
             user.setUsername(rs.getString("username"));
             user.setPassword(rs.getString("password"));
             user.setRole(rs.getString("role"));
-            user.setFirstName(rs.getString("first_name"));
-            user.setLastName(rs.getString("last_name"));
-            user.setLocation(rs.getString("location"));
-            user.setBio(rs.getString("bio"));
-            user.setPhone(rs.getString("phone"));
-            user.setWebsite(rs.getString("website"));
-            user.setAvatar(rs.getString("avatar"));
-            user.setModules(rs.getString("modules"));
+            try { user.setFirstName(rs.getString("first_name")); } catch (Exception ignored) { user.setFirstName("Administrador"); }
+            try { user.setLastName(rs.getString("last_name")); } catch (Exception ignored) { user.setLastName("General"); }
+            try { user.setLocation(rs.getString("location")); } catch (Exception ignored) {}
+            try { user.setBio(rs.getString("bio")); } catch (Exception ignored) {}
+            try { user.setPhone(rs.getString("phone")); } catch (Exception ignored) {}
+            try { user.setWebsite(rs.getString("website")); } catch (Exception ignored) {}
+            try { user.setAvatar(rs.getString("avatar")); } catch (Exception ignored) {}
+            try { 
+                String mods = rs.getString("modules");
+                user.setModules(mods != null ? mods : "dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin");
+            } catch (Exception ignored) {
+                user.setModules("dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin");
+            }
             return user;
         }
     };
 
     @Override
     public void save(User user) {
-        String sql = "INSERT INTO users (username, password, role, first_name, last_name, location, bio, phone, website, avatar, modules) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        jdbcTemplate.update(sql, 
-            user.getUsername(), 
-            user.getPassword(), 
-            user.getRole(),
-            user.getFirstName() != null ? user.getFirstName() : "Kate",
-            user.getLastName() != null ? user.getLastName() : "Jones",
-            user.getLocation() != null ? user.getLocation() : "Lane no 1, Newyork",
-            user.getBio() != null ? user.getBio() : "",
-            user.getPhone() != null ? user.getPhone() : "xxxxxxx987",
-            user.getWebsite() != null ? user.getWebsite() : "hencework.com",
-            user.getAvatar(),
-            user.getModules() != null ? user.getModules() : ""
-        );
+        try {
+            String sql = "INSERT INTO users (username, password, role, first_name, last_name, location, bio, phone, website, avatar, modules) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            jdbcTemplate.update(sql, 
+                user.getUsername(), 
+                user.getPassword(), 
+                user.getRole(),
+                user.getFirstName() != null ? user.getFirstName() : "Administrador",
+                user.getLastName() != null ? user.getLastName() : "General",
+                user.getLocation() != null ? user.getLocation() : "Lima, Perú",
+                user.getBio() != null ? user.getBio() : "",
+                user.getPhone() != null ? user.getPhone() : "",
+                user.getWebsite() != null ? user.getWebsite() : "",
+                user.getAvatar(),
+                user.getModules() != null ? user.getModules() : "dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin"
+            );
+        } catch (Exception e) {
+            System.err.println("Error saving user with full schema, trying fallback: " + e.getMessage());
+            String fallbackSql = "INSERT INTO users (username, password, role) VALUES (?, ?, ?)";
+            jdbcTemplate.update(fallbackSql, user.getUsername(), user.getPassword(), user.getRole());
+        }
     }
 
     @Override
     public Optional<User> findByUsername(String username) {
-        String sql = "SELECT id, username, password, role, first_name, last_name, location, bio, phone, website, avatar, modules FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))";
+        if (username == null || username.trim().isEmpty()) return Optional.empty();
+        String sql = "SELECT id, username, password, role, first_name, last_name, location, bio, phone, website, avatar, modules FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?)) ORDER BY id ASC LIMIT 1";
         try {
-            User user = jdbcTemplate.queryForObject(sql, rowMapper, username);
-            return Optional.ofNullable(user);
-        } catch (EmptyResultDataAccessException e) {
-            return Optional.empty();
+            java.util.List<User> list = jdbcTemplate.query(sql, rowMapper, username.trim());
+            return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
+        } catch (Exception e) {
+            System.err.println("Error querying user with full schema: " + e.getMessage() + ". Attempting fallback query...");
+            try {
+                String fallbackSql = "SELECT id, username, password, role FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(?)) ORDER BY id ASC LIMIT 1";
+                java.util.List<User> fallbackList = jdbcTemplate.query(fallbackSql, (rs, rowNum) -> {
+                    User u = new User();
+                    u.setId(rs.getLong("id"));
+                    u.setUsername(rs.getString("username"));
+                    u.setPassword(rs.getString("password"));
+                    u.setRole(rs.getString("role"));
+                    u.setFirstName("Administrador");
+                    u.setLastName("General");
+                    u.setModules("dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin");
+                    return u;
+                }, username.trim());
+                return fallbackList.isEmpty() ? Optional.empty() : Optional.of(fallbackList.get(0));
+            } catch (Exception ex) {
+                System.err.println("Fallback user query also failed: " + ex.getMessage());
+                return Optional.empty();
+            }
         }
     }
 
