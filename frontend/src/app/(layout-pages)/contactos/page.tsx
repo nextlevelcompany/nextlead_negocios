@@ -440,7 +440,7 @@ export default function ContactsDirectoryPage() {
         </Card>
       ) : viewMode === "grid" ? (
         /* GRID / CARDS VIEW */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 w-full min-w-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 w-full min-w-0">
           {filteredContacts.map((contact) => {
             const isEmpresa = contact.tipoPersona === "EMPRESA";
             const name =
@@ -616,9 +616,10 @@ export default function ContactsDirectoryPage() {
         </div>
       ) : (
         /* TABLE VIEW */
-        <Card className="bg-card shadow-xs w-full max-w-full min-w-0 overflow-x-auto">
+        <Card className="bg-card shadow-xs w-full max-w-full min-w-0 overflow-x-auto smooth-scroll">
           <CardContent className="p-0">
-            <Table>
+            <div className="min-w-[760px]">
+              <Table>
               <TableHeader>
                 <TableRow className="text-xs sm:text-sm font-semibold">
                   <TableHead className="w-10 text-center"></TableHead>
@@ -750,6 +751,7 @@ export default function ContactsDirectoryPage() {
                 })}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       )}

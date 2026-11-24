@@ -1,12 +1,30 @@
 import "./globals.css"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { ThemeProvider } from "next-themes"
 
 import UIThemeProvider from "@/providers/ui-theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+  ],
+}
+
 export const metadata: Metadata = {
   title: "NextLead B2B Soluciones | CRM WhatsApp & Ventas",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "NextLead CRM",
+  },
 
   description:
     "Plataforma integral de gestión comercial, CRM WhatsApp, prospección y propuestas corporativas B2B.",

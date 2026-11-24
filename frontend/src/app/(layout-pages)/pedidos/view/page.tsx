@@ -78,6 +78,13 @@ export default function PedidosViewPage() {
 
   // Filters state
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(true);
+
+  // Collapse sidebar by default on mobile / smaller screens to avoid blocking the board
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setIsFilterSidebarOpen(false);
+    }
+  }, []);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterZona, setFilterZona] = useState<string>("all");
   const [filterChofer, setFilterChofer] = useState<string>("all");
@@ -559,7 +566,7 @@ export default function PedidosViewPage() {
       <div className="flex flex-col lg:flex-row items-start gap-4 w-full min-w-0">
         {/* Collapsible Left Filter Sidebar */}
         {isFilterSidebarOpen && (
-          <aside className="w-full lg:w-72 shrink-0 bg-card border rounded-xl p-3.5 shadow-xs space-y-4">
+          <aside className="w-full lg:w-60 xl:w-72 shrink-0 bg-card border rounded-xl p-3.5 shadow-xs space-y-4">
             {/* Sidebar Header */}
             <div className="flex items-center justify-between pb-2 border-b">
               <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
@@ -998,8 +1005,93 @@ export default function PedidosViewPage() {
       </div>
     ) : (
         /* TABLE VIEW */
-        <Card className="bg-card">
-          <CardContent className="p-0 overflow-x-auto">
+        <Card className="bg-card w-full max-w-full min-w-0 overflow-x-auto shadow-xs">
+          {/* MOBILE CARDS VIEW (< md) */}
+          <div className="block md:hidden divide-y divide-border/60">
+            {filteredPedidos.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground text-xs">
+                No se encontraron pedidos con los filtros seleccionados.
+              </div>
+            ) : (
+              filteredPedidos.map((pedido) => {
+                const etapa = data.columns.find((c) => c.id === pedido.etapa_id);
+                const cliente =
+                  (pedido.contacto_nombre
+                    ? pedido.contacto_nombre + " " + (pedido.contacto_apellido || "")
+                    : "") ||
+                  pedido.empresa_nombre ||
+                  pedido.contacto_persona_nombre ||
+                  "Cliente";
+
+                return (
+                  <div key={pedido.id} className="p-3.5 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-bold text-primary font-mono text-xs">
+                          {pedido.numero_pedido || `PED-${pedido.id}`}
+                        </span>
+                        <h4 className="font-semibold text-xs sm:text-sm text-foreground truncate mt-0.5">
+                          {cliente}
+                        </h4>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-bold font-mono text-xs sm:text-sm text-emerald-600 block">
+                          S/ {(Number(pedido.subtotal) > 0 ? Number(pedido.subtotal) : Number(pedido.total || 0) / 1.18).toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {pedido.fecha_entrega ? String(pedido.fecha_entrega).split("T")[0] : ""}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                      <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+                        {etapa?.nombre || "Registrado"}
+                      </Badge>
+                      {pedido.zona_nombre && (
+                        <span className="text-muted-foreground text-xs">
+                          📍 {pedido.zona_nombre}
+                        </span>
+                      )}
+                      {pedido.chofer_n && (
+                        <span className="text-muted-foreground text-xs ml-auto">
+                          🚚 {pedido.chofer_n}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-border/40">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1 px-2.5 min-h-[36px] text-emerald-600"
+                        onClick={() => shareWhatsApp(pedido)}
+                      >
+                        <Share2 className="size-3.5" />
+                        WhatsApp
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1 px-2.5 min-h-[36px]"
+                        asChild
+                      >
+                        <Link href={`/pedidos/create?edit_id=${pedido.id}`}>
+                          <Edit className="size-3.5 text-muted-foreground" />
+                          Editar
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* DESKTOP TABLE VIEW (>= md) */}
+          <CardContent className="p-0 overflow-x-auto hidden md:block">
+            <div className="min-w-[900px] smooth-scroll">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
@@ -1096,6 +1188,7 @@ export default function PedidosViewPage() {
                 )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       )}

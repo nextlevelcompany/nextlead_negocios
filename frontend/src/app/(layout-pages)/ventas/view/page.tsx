@@ -227,6 +227,13 @@ export default function SalesViewPage() {
   // Left Filter Sidebar: Collapsible
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // Collapse sidebar by default on mobile / smaller screens to avoid blocking the board
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setSidebarOpen(false);
+    }
+  }, []);
+
   // Filters State
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDesde, setFilterDesde] = useState("");
@@ -1506,7 +1513,7 @@ export default function SalesViewPage() {
         {/* PANEL LATERAL DE FILTROS (FILTRO DE LA IZQUIERDA) */}
         {/* =============================================================== */}
         {sidebarOpen && (
-          <div className="w-full lg:w-72 shrink-0">
+          <div className="w-full lg:w-60 xl:w-72 shrink-0">
             <Card className="bg-card sticky top-4 shadow-sm border">
               <CardHeader className="p-3.5 border-b flex flex-row items-center justify-between">
                 <CardTitle className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -2510,7 +2517,121 @@ export default function SalesViewPage() {
           ) : (
             /* VISTA LISTA / TABLA */
             <Card className="bg-card shadow-xs w-full max-w-full min-w-0 overflow-x-auto">
-              <CardContent className="p-0 overflow-x-auto">
+              {/* MOBILE STACKED CARDS VIEW (< md) */}
+              <div className="block md:hidden divide-y divide-border/60">
+                {loading ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <RefreshCw className="size-6 animate-spin mx-auto mb-2 text-primary" />
+                    <p className="text-xs">Cargando ventas...</p>
+                  </div>
+                ) : filteredSales.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <ShoppingCart className="size-8 text-muted-foreground/40 mx-auto mb-2" />
+                    <p className="font-medium text-xs text-foreground">No se encontraron ventas</p>
+                  </div>
+                ) : (
+                  filteredSales.map((sale) => {
+                    const isPaid = (sale.estado_pago || "").toLowerCase() === "pagado";
+                    const isCompleted =
+                      (sale.estado || "").toLowerCase() === "completada" ||
+                      (sale.estado_instalacion || "").toLowerCase() === "completada";
+
+                    return (
+                      <div key={sale.id} className="p-3.5 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono font-bold text-xs text-primary">
+                                {sale.numero_venta || `V-${String(sale.id).padStart(5, "0")}`}
+                              </span>
+                              <Badge variant="outline" className="text-[10px] uppercase font-normal px-1.5 py-0">
+                                {sale.tipo_comprobante?.replace("_", " ") || "Nota Venta"}
+                              </Badge>
+                            </div>
+                            <h4 className="font-semibold text-xs sm:text-sm text-foreground mt-0.5 truncate">
+                              {sale.cliente_nombre_completo || "Cliente General"}
+                            </h4>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 block">
+                              S/ {Number(sale.total || 0).toFixed(2)}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              {sale.fecha_venta ? String(sale.fecha_venta).substring(0, 10) : ""}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Badges row */}
+                        <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                          <Badge
+                            variant="outline"
+                            className={`px-2 py-0.5 font-medium ${
+                              isPaid
+                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                            }`}
+                          >
+                            {isPaid ? "Pagado" : "Pendiente"}
+                          </Badge>
+
+                          {isCompleted ? (
+                            <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 border-0">
+                              Instalada
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+                              {sale.estado || "En Proceso"}
+                            </Badge>
+                          )}
+
+                          {sale.vendedor_nombre && (
+                            <span className="text-xs text-muted-foreground ml-auto truncate max-w-[120px]">
+                              {sale.vendedor_nombre}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Quick Mobile Action Buttons */}
+                        <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-border/40">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1 px-2.5 min-h-[36px]"
+                            onClick={() => handleOpenView(sale)}
+                          >
+                            <Eye className="size-3.5 text-blue-600" />
+                            Ver
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1 px-2.5 min-h-[36px]"
+                            onClick={() => handleOpenDocsModal(sale)}
+                          >
+                            <FolderArchive className="size-3.5 text-sky-600" />
+                            Docs
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1 px-2.5 min-h-[36px]"
+                            onClick={() => handleOpenInvoicesModal(sale)}
+                          >
+                            <FileText className="size-3.5 text-amber-600" />
+                            Facturas
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* DESKTOP TABLE VIEW (>= md) */}
+              <CardContent className="p-0 overflow-x-auto hidden md:block">
+                <div className="min-w-[1000px] smooth-scroll">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50 text-xs">
@@ -2720,6 +2841,7 @@ export default function SalesViewPage() {
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
           )}

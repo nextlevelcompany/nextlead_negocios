@@ -151,6 +151,13 @@ export default function OpportunitiesKanbanPage() {
 
   // Filters
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(true);
+
+  // Collapse sidebar by default on mobile / smaller screens to avoid blocking the board
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setIsFilterSidebarOpen(false);
+    }
+  }, []);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterTag, setFilterTag] = useState("all");
@@ -839,7 +846,7 @@ export default function OpportunitiesKanbanPage() {
       <div className="flex flex-col lg:flex-row items-start gap-4 w-full min-w-0">
         {/* Collapsible Left Filter Sidebar */}
         {isFilterSidebarOpen && (
-          <aside className="w-full lg:w-72 shrink-0 bg-card border rounded-xl p-3.5 shadow-xs space-y-4">
+          <aside className="w-full lg:w-60 xl:w-72 shrink-0 bg-card border rounded-xl p-3.5 shadow-xs space-y-4">
             {/* Sidebar Header */}
             <div className="flex items-center justify-between pb-2 border-b">
               <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
@@ -1211,7 +1218,7 @@ export default function OpportunitiesKanbanPage() {
                   onDragOver={(e) => handleDragOver(e, col.id)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, col)}
-                  className={`w-80 min-w-[20rem] bg-muted/40 border rounded-xl flex flex-col max-h-[calc(100vh-320px)] min-h-[380px] shadow-xs transition-all duration-200 ${
+                  className={`w-72 sm:w-80 min-w-[17.5rem] sm:min-w-[19.5rem] bg-muted/40 border rounded-xl flex flex-col max-h-[calc(100vh-320px)] min-h-[380px] shadow-xs transition-all duration-200 ${
                     isDropTarget
                       ? "ring-2 ring-emerald-500 bg-emerald-500/10 border-emerald-500 shadow-md scale-[1.01]"
                       : ""
@@ -1608,7 +1615,104 @@ export default function OpportunitiesKanbanPage() {
       ) : (
         /* TABLE LIST VIEW */
         <Card className="bg-card shadow-xs w-full max-w-full min-w-0 overflow-x-auto">
-          <CardContent className="p-0">
+          {/* MOBILE CARDS VIEW (< md) */}
+          <div className="block md:hidden divide-y divide-border/60">
+            {filteredOpps.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground text-xs">
+                No se encontraron oportunidades con los filtros seleccionados.
+              </div>
+            ) : (
+              filteredOpps.map((opp) => {
+                const etapa = columns.find((c) => c.id === opp.etapa_id);
+                return (
+                  <div key={opp.id} className="p-3.5 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          #{opp.id}
+                        </span>
+                        <h4 className="font-semibold text-xs sm:text-sm text-foreground truncate">
+                          {opp.titulo}
+                        </h4>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {opp.contacto_nombre_completo || opp.contacto_persona || "Sin contacto"}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-bold font-mono text-xs sm:text-sm text-emerald-600 block">
+                          S/ {Number(opp.valor || 0).toLocaleString("es-PE", { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {opp.created_at ? opp.created_at.substring(0, 10) : ""}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                      {etapa && (
+                        <Badge
+                          variant="secondary"
+                          className={`text-[10px] px-2 py-0.5 font-medium ${
+                            etapa.es_ganada
+                              ? "bg-emerald-500/15 text-emerald-600"
+                              : etapa.es_perdida
+                              ? "bg-destructive/15 text-destructive"
+                              : ""
+                          }`}
+                        >
+                          {etapa.nombre}
+                        </Badge>
+                      )}
+                      <Badge
+                        variant="secondary"
+                        className={`text-[10px] px-1.5 py-0 capitalize ${
+                          opp.prioridad === "alta" || opp.prioridad === "urgente"
+                            ? "bg-rose-500/10 text-rose-600"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {opp.prioridad || "Normal"}
+                      </Badge>
+                      {opp.vendedor_nombre && (
+                        <span className="text-xs text-muted-foreground ml-auto truncate max-w-[130px]">
+                          👤 {opp.vendedor_nombre}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-border/40">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1 px-2.5 min-h-[36px] text-emerald-700"
+                        asChild
+                      >
+                        <Link href={`/opportunities/print?id=${opp.id}`}>
+                          <Printer className="size-3.5" />
+                          PDF
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1 px-2.5 min-h-[36px]"
+                        asChild
+                      >
+                        <Link href={`/opportunities/create?edit_id=${opp.id}`}>
+                          <Edit className="size-3.5" />
+                          Editar
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* DESKTOP TABLE VIEW (>= md) */}
+          <CardContent className="p-0 overflow-x-auto hidden md:block">
+            <div className="min-w-[1000px] smooth-scroll">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1767,6 +1871,7 @@ export default function OpportunitiesKanbanPage() {
                 )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       )}

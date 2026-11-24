@@ -501,6 +501,41 @@
 
 
 /* Gradient Backgrounds for Cards and Progress Bars */
+/* Mobile Smooth Scrolling and Repaint Optimization */
+@media (max-width: 1024px), (pointer: coarse) {
+  .dark-blue body,
+  .gaussian-black body,
+  .semi-dark-preview {
+    background-attachment: scroll !important;
+  }
+}
+
+/* Prevent auto-zoom on iOS/Android and ensure touch comfort */
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+  
+  /* Touch target standard (min 44px) */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Momentum scrolling for iOS & overflow containers */
+.smooth-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Safe area padding for mobile bottom navigation bar */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
+}
+
 .gradient-red {
   background-image: linear-gradient(310deg, #ee0979, #ff6a00);
 }
