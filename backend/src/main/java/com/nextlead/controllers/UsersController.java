@@ -123,15 +123,6 @@ public class UsersController {
                 .body("Error al actualizar usuario: " + e.getMessage());
         }
     }
-            existingUser.setModules(updatedUser.getModules());
-        }
-
-        userDao.update(existingUser);
-
-        // Ocultar la contraseña en la respuesta
-        existingUser.setPassword(null);
-        return ResponseEntity.ok(existingUser);
-    }
 
     @DeleteMapping("/{username}")
     public ResponseEntity<?> deleteUser(@PathVariable String username) {
