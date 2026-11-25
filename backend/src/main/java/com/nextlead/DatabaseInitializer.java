@@ -36,25 +36,47 @@ public class DatabaseInitializer implements CommandLineRunner {
         ensureSchemaIntegrity();
 
         // ── Usuario administrador ───────────────────────────────────────────
-        String secureAdminPass = "Admin#2026*Secure!";
-        String encodedSecurePass = passwordEncoder.encode(secureAdminPass);
         String allModules = "dashboard,chat,contactos,oportunidades,pedidos,ventas,productos,inventarios,finanzas,personal,admin";
 
-        // Insertar o actualizar la contraseña segura del usuario 'admin'
         try {
-            int updated = jdbcTemplate.update(
-                "UPDATE users SET password = ?, role = 'ADMIN', modules = ? WHERE LOWER(TRIM(username)) = 'admin'",
-                encodedSecurePass, allModules
+            Integer adminCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE LOWER(TRIM(username)) = 'admin'",
+                Integer.class
             );
-            if (updated == 0) {
+            if (adminCount == null || adminCount == 0) {
+                String defaultAdminPass = "admin123";
+                String encodedPass = passwordEncoder.encode(defaultAdminPass);
                 jdbcTemplate.update(
                     "INSERT INTO users (username, password, role, first_name, last_name, modules) VALUES ('admin', ?, 'ADMIN', 'Administrador', 'General', ?)",
-                    encodedSecurePass, allModules
+                    encodedPass, allModules
+                );
+                System.out.println(">>> Usuario administrador inicial creado con usuario: admin y clave: admin123");
+            } else {
+                // Si la contraseña actual en la BD es la clave técnica "Admin#2026*Secure!", sincronizarla a "admin123" para permitir acceso y cambio
+                List<String> currentPassList = jdbcTemplate.query(
+                    "SELECT password FROM users WHERE LOWER(TRIM(username)) = 'admin'",
+                    (rs, rowNum) -> rs.getString("password")
+                );
+                if (!currentPassList.isEmpty()) {
+                    String currentPass = currentPassList.get(0);
+                    if (currentPass != null && passwordEncoder.matches("Admin#2026*Secure!", currentPass)) {
+                        jdbcTemplate.update(
+                            "UPDATE users SET password = ? WHERE LOWER(TRIM(username)) = 'admin'",
+                            passwordEncoder.encode("admin123")
+                        );
+                        System.out.println(">>> Contraseña de admin restablecida a valor inicial admin123 para permitir cambio seguro.");
+                    } else {
+                        System.out.println(">>> Usuario administrador ya tiene una clave personalizada. No se sobreescribe.");
+                    }
+                }
+                // Asegurar que tenga rol ADMIN y módulos habilitados sin tocar su contraseña
+                jdbcTemplate.update(
+                    "UPDATE users SET role = 'ADMIN', modules = COALESCE(NULLIF(modules, ''), ?) WHERE LOWER(TRIM(username)) = 'admin'",
+                    allModules
                 );
             }
-            System.out.println(">>> Credenciales de administrador actualizadas con contraseña de alta seguridad.");
         } catch (Exception e) {
-            System.err.println(">>> Error actualizando usuario admin: " + e.getMessage());
+            System.err.println(">>> Error verificando usuario admin: " + e.getMessage());
         }
 
         // ── Catálogo de Ubigeo (muestra representativa INEI) ───────────────

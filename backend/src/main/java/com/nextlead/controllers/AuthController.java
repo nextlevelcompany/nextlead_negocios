@@ -42,7 +42,7 @@ public class AuthController {
                 // Auto-reparación inmediata: si no existe el usuario admin en la BD, crearlo en el acto
                 User autoAdmin = new User();
                 autoAdmin.setUsername("admin");
-                autoAdmin.setPassword(passwordEncoder.encode("Admin#2026*Secure!"));
+                autoAdmin.setPassword(passwordEncoder.encode("admin123"));
                 autoAdmin.setRole("ADMIN");
                 autoAdmin.setFirstName("Administrador");
                 autoAdmin.setLastName("General");
@@ -58,16 +58,15 @@ public class AuthController {
                     matches = passwordEncoder.matches(inputPass, user.getPassword()) || passwordEncoder.matches(cleanPass, user.getPassword());
                 } catch (Exception ignored) {}
                 
-                // Soporte flexible para credenciales de administrador (nueva clave segura y respaldo)
-                if (!matches) {
-                    if ("admin".equalsIgnoreCase(user.getUsername())) {
-                        if ("Admin#2026*Secure!".equals(cleanPass) || "Admin#2026*Secure!".equals(inputPass) ||
-                            "admin123".equals(cleanPass) || "admin123".equals(inputPass) ||
-                            "admin".equals(cleanPass) || "admin".equals(inputPass)) {
-                            matches = true;
-                        }
-                    } else if (inputPass.equals(user.getPassword()) || cleanPass.equals(user.getPassword())) {
+                // Soporte si la contraseña en BD quedó temporalmente en texto plano
+                if (!matches && user.getPassword() != null) {
+                    if (inputPass.equals(user.getPassword()) || cleanPass.equals(user.getPassword())) {
                         matches = true;
+                        // Auto-migrar a BCrypt seguro
+                        try {
+                            user.setPassword(passwordEncoder.encode(inputPass));
+                            userDao.update(user);
+                        } catch (Exception ignored) {}
                     }
                 }
 
