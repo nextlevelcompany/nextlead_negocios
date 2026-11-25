@@ -125,13 +125,17 @@ function CreateSaleContent() {
       setLoading(true);
       try {
         const [contactsRes, prodsRes, settingsRes, staffRes] = await Promise.all([
-          api.get("/api/contacts"),
+          api.get("/api/contacts?page=0&size=200"),
           api.get("/api/productos"),
           api.get("/api/opportunities/settings").catch(() => ({ data: {} })),
           api.get("/api/payroll/staff").catch(() => ({ data: [] })),
         ]);
 
-        const rawContacts = Array.isArray(contactsRes.data) ? contactsRes.data : [];
+        const rawContacts = Array.isArray(contactsRes.data)
+          ? contactsRes.data
+          : Array.isArray(contactsRes.data?.content)
+          ? contactsRes.data.content
+          : [];
         const mappedContacts: ContactOption[] = rawContacts.map((c: any) => ({
           id: c.id,
           tipo_persona: c.tipoPersona || c.tipo_persona || (c.razonSocial ? "EMPRESA" : "NATURAL"),

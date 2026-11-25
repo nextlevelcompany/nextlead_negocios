@@ -114,13 +114,10 @@ public class ContactDaoImpl implements ContactDao {
             SELECT c.*, e.razon_social AS empresa_nombre
             FROM contacts c
             LEFT JOIN contacts e ON c.empresa_id = e.id
-            ORDER BY c.date_created DESC
+            ORDER BY c.id DESC
+            LIMIT 500
             """;
-        List<Contact> list = jdbcTemplate.query(sql, contactRowMapper);
-        for (Contact c : list) {
-            c.setDirecciones(findAddressesByContactId(c.getId()));
-        }
-        return list;
+        return jdbcTemplate.query(sql, contactRowMapper);
     }
 
     @Override

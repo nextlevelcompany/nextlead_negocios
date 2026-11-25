@@ -94,7 +94,8 @@ public class ContactController {
             int pageSize = (size != null && size > 0) ? size : 20;
             return ResponseEntity.ok(contactDao.findPaginated(page, pageSize, search, tipoPersona, semaforo));
         }
-        return ResponseEntity.ok(contactDao.findAll());
+        int defaultSize = (size != null && size > 0) ? Math.min(size, 500) : 200;
+        return ResponseEntity.ok(contactDao.findPaginated(0, defaultSize, search, tipoPersona, semaforo).get("content"));
     }
 
     // =======================================================

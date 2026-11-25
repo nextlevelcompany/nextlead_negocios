@@ -124,12 +124,16 @@ function CreatePedidoContent() {
       setLoading(true);
       try {
         const [contactsRes, prodRes, logRes] = await Promise.all([
-          api.get("/api/contacts"),
+          api.get("/api/contacts?page=0&size=200"),
           api.get("/api/productos"),
           api.get("/api/pedidos/logistics-data"),
         ]);
 
-        const rawContacts: any[] = Array.isArray(contactsRes.data) ? contactsRes.data : [];
+        const rawContacts: any[] = Array.isArray(contactsRes.data)
+          ? contactsRes.data
+          : Array.isArray(contactsRes.data?.content)
+          ? contactsRes.data.content
+          : [];
         const normalizedContacts: ContactOption[] = rawContacts.map((c) => ({
           id: c.id,
           tipoPersona: c.tipoPersona || c.tipo_persona || "NATURAL",
