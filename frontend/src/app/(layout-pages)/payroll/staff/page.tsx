@@ -587,7 +587,7 @@ export default function StaffPage() {
 
       {/* Modal Add / Edit Worker */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-w-2xl max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="size-5 text-primary" />
@@ -771,7 +771,7 @@ export default function StaffPage() {
           MODAL: CREAR O VINCULAR USUARIO CRM DESDE COLABORADOR
       ========================================================================= */}
       <Dialog open={userModalOpen} onOpenChange={setUserModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-lg max-w-lg p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <UserPlus className="size-5 text-emerald-600" />

@@ -1061,14 +1061,14 @@ export default function UsersManagementPage() {
           MODAL: CREAR / EDITAR USUARIO CON TIPO DE ACCESO Y PERMISOS
       ========================================================================= */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
+        <DialogContent className="sm:max-w-4xl max-w-4xl w-[95vw] max-h-[92vh] overflow-y-auto p-6 sm:p-8">
+          <DialogHeader className="pb-3 border-b">
+            <DialogTitle className="flex items-center gap-2.5 text-xl font-bold">
               {isEdit ? <Edit className="size-5 text-blue-600" /> : <UserPlus className="size-5 text-emerald-600" />}
               {isEdit ? `Editar Usuario: @${formUsername}` : "Crear Nuevo Usuario por Tipo de Acceso"}
             </DialogTitle>
-            <DialogDescription>
-              Configura los datos personales, rol de acceso y restricciones de visualización de información para este usuario.
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              Configura las credenciales de acceso, rol comercial y permisos granulares de visibilidad de información para este usuario.
             </DialogDescription>
           </DialogHeader>
 
