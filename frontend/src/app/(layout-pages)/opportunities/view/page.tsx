@@ -73,12 +73,19 @@ import {
   FileText,
   Phone,
   MessageSquare,
+  Copy,
   UserCheck,
   Briefcase,
   ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { OpportunityWhatsAppModal } from "@/components/opportunities/OpportunityWhatsAppModal";
+import {
+  OpportunityWhatsAppParams,
+  buildOpportunityWhatsAppMessage,
+  copyOpportunityToClipboard,
+} from "@/components/opportunities/opportunityWhatsApp";
 
 interface KanbanColumn {
   id: number;
@@ -121,6 +128,8 @@ interface Opportunity {
   moneda?: string | null;
   total_instalacion?: number | null;
   plazo_acuerdo?: number | null;
+  detalles_json?: string | null;
+  direccion_completa?: string | null;
 }
 
 interface KanbanTag {
@@ -148,6 +157,66 @@ export default function OpportunitiesKanbanPage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [draggedOppId, setDraggedOppId] = useState<number | null>(null);
   const [dragOverColId, setDragOverColId] = useState<number | null>(null);
+
+  // WhatsApp Share State
+  const [selectedOppForWhatsApp, setSelectedOppForWhatsApp] = useState<Opportunity | null>(null);
+  const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+
+  const getOpportunityWhatsAppParams = (opp: Opportunity): OpportunityWhatsAppParams => {
+    let itemsParsed: any[] = [];
+    if (opp.detalles_json) {
+      try {
+        itemsParsed = JSON.parse(opp.detalles_json);
+      } catch (e) {}
+    } else if (opp.productos_json) {
+      try {
+        const prod = JSON.parse(opp.productos_json);
+        itemsParsed = Array.isArray(prod)
+          ? prod.map((p: any) => ({
+              titulo: p.nombre,
+              descripcion: p.nombre,
+              cantidad: p.cantidad,
+              precio: p.precio,
+            }))
+          : [];
+      } catch (e) {}
+    }
+
+    return {
+      id: opp.id,
+      titulo: opp.titulo,
+      empresa: opp.contacto_nombre_completo || "Cliente",
+      ruc: opp.numero_documento || "",
+      direccion: opp.direccion_completa || itemsParsed[0]?.direccion || "",
+      contacto: opp.contacto_persona_calculado || opp.contacto_persona || "",
+      telefono: opp.telefono_movil || "",
+      correo: opp.contacto_email || "",
+      tipo_propuesta: opp.tipo_propuesta || "venta",
+      plazo_acuerdo: opp.plazo_acuerdo || 24,
+      moneda: opp.moneda || "Soles",
+      items: itemsParsed,
+      total_mensual: opp.valor,
+      total_instalacion: opp.total_instalacion || 0,
+      asesor_nombre: opp.vendedor_nombre || "",
+      notas: opp.notas || "",
+    };
+  };
+
+  const handleOpenWhatsAppModal = (opp: Opportunity) => {
+    setSelectedOppForWhatsApp(opp);
+    setWhatsAppModalOpen(true);
+  };
+
+  const handleDirectCopyWhatsApp = async (opp: Opportunity) => {
+    const params = getOpportunityWhatsAppParams(opp);
+    const text = buildOpportunityWhatsAppMessage(params);
+    const ok = await copyOpportunityToClipboard(text);
+    if (ok) {
+      toast.success(`¡Detalles de la oportunidad #${opp.id} copiados para WhatsApp!`);
+    } else {
+      toast.error("No se pudo copiar automáticamente al portapapeles.");
+    }
+  };
 
   // Filters
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(true);
@@ -1351,6 +1420,26 @@ export default function OpportunitiesKanbanPage() {
                                       </DropdownMenuItem>
                                     ))}
                                   <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenWhatsAppModal(opp);
+                                    }}
+                                    className="cursor-pointer text-xs text-emerald-700 font-medium"
+                                  >
+                                    <MessageSquare className="size-3.5 mr-1.5" />
+                                    Compartir por WhatsApp
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDirectCopyWhatsApp(opp);
+                                    }}
+                                    className="cursor-pointer text-xs font-medium"
+                                  >
+                                    <Copy className="size-3.5 mr-1.5 text-muted-foreground" />
+                                    Copiar Detalles (WSP)
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem asChild>
                                     <Link
                                       href={`/opportunities/print?id=${opp.id}`}
@@ -1409,23 +1498,23 @@ export default function OpportunitiesKanbanPage() {
                               )}
 
                               {/* Phone & WhatsApp Link */}
-                              {opp.telefono_movil && (
-                                <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5 border-t border-border/40">
-                                  <span className="flex items-center gap-1 truncate">
-                                    <Phone className="size-2.5 text-muted-foreground" />
-                                    {opp.telefono_movil}
-                                  </span>
-                                  <a
-                                    href={`https://wa.me/${opp.telefono_movil.replace(/\D/g, "")}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-0.5 text-[10px] shrink-0"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <MessageSquare className="size-2.5" /> WhatsApp
-                                  </a>
-                                </div>
-                              )}
+                              <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5 border-t border-border/40">
+                                <span className="flex items-center gap-1 truncate">
+                                  <Phone className="size-2.5 text-muted-foreground" />
+                                  {opp.telefono_movil || "Sin teléfono"}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 text-[10px] shrink-0 hover:underline cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenWhatsAppModal(opp);
+                                  }}
+                                  title="Ver, copiar y enviar todos los detalles de la oportunidad por WhatsApp"
+                                >
+                                  <MessageSquare className="size-2.5" /> WhatsApp
+                                </button>
+                              </div>
                             </div>
 
                             {/* 4. Proposal Services / Products Preview */}
@@ -1842,6 +1931,15 @@ export default function OpportunitiesKanbanPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
+                              onClick={() => handleOpenWhatsAppModal(opp)}
+                              title="Compartir y enviar detalles por WhatsApp"
+                            >
+                              <MessageSquare className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-7 w-7 text-emerald-700 hover:bg-emerald-50"
                               asChild
                               title="Ver / Imprimir Cotización PDF"
@@ -2110,6 +2208,12 @@ export default function OpportunitiesKanbanPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Modal para copiar y enviar detalles de oportunidad a WhatsApp */}
+      <OpportunityWhatsAppModal
+        open={whatsAppModalOpen}
+        onOpenChange={setWhatsAppModalOpen}
+        data={selectedOppForWhatsApp ? getOpportunityWhatsAppParams(selectedOppForWhatsApp) : {}}
+      />
     </div>
   );
 }

@@ -35,6 +35,7 @@ import {
   User,
   MapPin,
   X,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -42,6 +43,8 @@ import {
   CorporateQuoteTable,
   CorporateQuoteItem,
 } from "@/components/opportunities/CorporateQuoteTable";
+import { OpportunityWhatsAppModal } from "@/components/opportunities/OpportunityWhatsAppModal";
+import { OpportunityWhatsAppParams } from "@/components/opportunities/opportunityWhatsApp";
 
 interface KanbanColumn {
   id: number;
@@ -88,6 +91,8 @@ function CreateOpportunityContent() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [savedOpportunityId, setSavedOpportunityId] = useState<number | null>(editId ? Number(editId) : null);
 
   // Master data
   const [columns, setColumns] = useState<KanbanColumn[]>([]);
@@ -476,6 +481,49 @@ function CreateOpportunityContent() {
     return contacts.find((c) => String(c.id) === String(form.contacto_id));
   }, [contacts, form.contacto_id]);
 
+  // Parameters for WhatsApp message and modal preview
+  const currentWhatsAppParams: OpportunityWhatsAppParams = useMemo(() => {
+    const primaryAddress = addresses.length > 0 ? addresses[0] : "";
+    return {
+      id: savedOpportunityId || form.id || undefined,
+      titulo: form.titulo,
+      empresa: currentContact?.display_name || currentContact?.razon_social || "",
+      ruc: currentContact?.numero_documento || "",
+      direccion: primaryAddress,
+      contacto: selectedContactPerson || form.contacto_persona || "",
+      telefono: currentContact?.telefono_principal || "",
+      correo: currentContact?.email || "",
+      tipo_propuesta: form.tipo_propuesta,
+      plazo_acuerdo: form.plazo_acuerdo,
+      moneda: form.moneda,
+      items: items.map((it) => ({
+        titulo: it.titulo,
+        descripcion: it.descripcion,
+        cantidad: it.cantidad,
+        precio: it.precio,
+        instalacion: it.instalacion,
+        direccion: it.direccion,
+      })),
+      total_mensual: totalMonthlyIncIgv,
+      total_instalacion: totalInstallationIncIgv,
+      asesor_nombre: form.firma_nombre,
+      asesor_cargo: form.firma_cargo,
+      asesor_celular: form.firma_celular,
+      asesor_email: form.firma_email,
+      condiciones: form.condiciones_comerciales,
+      notas: form.notas,
+    };
+  }, [
+    savedOpportunityId,
+    form,
+    currentContact,
+    addresses,
+    selectedContactPerson,
+    items,
+    totalMonthlyIncIgv,
+    totalInstallationIncIgv,
+  ]);
+
   // Submit Handler
   const handleSubmit = async (e?: React.FormEvent, openPrintAfter = false) => {
     if (e) e.preventDefault();
@@ -525,6 +573,10 @@ function CreateOpportunityContent() {
 
       const res = await api.post("/api/opportunities/save", payload);
       const savedId = res.data?.id || form.id;
+      if (savedId) {
+        setSavedOpportunityId(Number(savedId));
+      }
+
       if (res.data?.venta_creada) {
         toast.success(`¡Oportunidad Ganada! Venta ${res.data.numero_venta} Creada`, {
           description: `Se ha generado automáticamente la venta ${res.data.numero_venta} en el módulo de Ventas.`,
@@ -536,7 +588,8 @@ function CreateOpportunityContent() {
       if (openPrintAfter && savedId) {
         router.push(`/opportunities/print?id=${savedId}`);
       } else {
-        router.push("/opportunities/view");
+        // Al crear o guardar la oportunidad, mostrar ventana para copiar y enviar a WhatsApp
+        setSuccessModalOpen(true);
       }
     } catch (err: any) {
       console.error("Error saving opportunity:", err);
@@ -592,6 +645,18 @@ function CreateOpportunityContent() {
             className="text-xs h-8"
           >
             Cancelar
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSuccessModalOpen(true)}
+            className="text-xs h-8 gap-1.5 border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+            title="Vista previa y copia de resumen para WhatsApp"
+          >
+            <MessageSquare className="size-3.5" />
+            WhatsApp
           </Button>
 
           <Button
@@ -1217,6 +1282,15 @@ function CreateOpportunityContent() {
           </div>
         </div>
       </form>
+
+      {/* Modal interactivo para copiar y enviar a WhatsApp con todos los detalles */}
+      <OpportunityWhatsAppModal
+        open={successModalOpen}
+        onOpenChange={setSuccessModalOpen}
+        data={currentWhatsAppParams}
+        isNewlyCreated={!form.id}
+        onGoToPipeline={() => router.push("/opportunities/view")}
+      />
     </div>
   );
 }
