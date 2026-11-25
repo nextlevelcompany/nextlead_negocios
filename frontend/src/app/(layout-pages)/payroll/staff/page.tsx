@@ -38,10 +38,18 @@ import {
   ShieldCheck,
   Building2,
   Calendar,
+  UserPlus,
+  UserCheck,
+  Shield,
+  Key,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 interface Worker {
   id?: number;
+  usuario_id?: number | null;
+  usuario_username?: string | null;
   nombre: string;
   apellido: string;
   dni: string;
@@ -86,6 +94,96 @@ export default function StaffPage() {
     estado: "Activo",
     regimen_pension: "ONP",
   });
+
+  // CRM User Creation State
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [userWorker, setUserWorker] = useState<Worker | null>(null);
+  const [userUsername, setUserUsername] = useState("");
+  const [userPassword, setUserPassword] = useState("admin123");
+  const [userRole, setUserRole] = useState("VENDEDOR");
+  const [userSaving, setUserSaving] = useState(false);
+  const [showUserPassword, setShowUserPassword] = useState(false);
+
+  const handleOpenCreateUser = (w: Worker) => {
+    setUserWorker(w);
+    if (w.usuario_username) {
+      setUserUsername(w.usuario_username);
+    } else {
+      const cleanN = (w.nombre || "").trim().toLowerCase().split(" ")[0];
+      const cleanA = (w.apellido || "").trim().toLowerCase().split(" ")[0];
+      setUserUsername(cleanN && cleanA ? `${cleanN}.${cleanA}`.replace(/[^a-z0-9.]/g, "") : `user.${w.dni || w.id}`);
+    }
+    setUserPassword("admin123");
+    const op = (w.rol_operativo || "").toLowerCase();
+    if (op.includes("vendedor") || op.includes("asesor") || op.includes("comercial") || op.includes("ventas")) {
+      setUserRole("VENDEDOR");
+    } else if (op.includes("supervis") || op.includes("jefe") || op.includes("lider")) {
+      setUserRole("SUPERVISOR");
+    } else if (op.includes("finan") || op.includes("caja") || op.includes("conta")) {
+      setUserRole("FINANZAS");
+    } else if (op.includes("opera") || op.includes("logist") || op.includes("chofer") || op.includes("almacen")) {
+      setUserRole("OPERACIONES");
+    } else {
+      setUserRole("VENDEDOR");
+    }
+    setUserModalOpen(true);
+  };
+
+  const handleSaveCrmUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userWorker) return;
+    if (!userUsername.trim()) {
+      toast.warning("El nombre de usuario es obligatorio.");
+      return;
+    }
+    if (!userPassword.trim()) {
+      toast.warning("Debe ingresar una contraseña.");
+      return;
+    }
+    try {
+      setUserSaving(true);
+      const modulesPayload = {
+        dashboard: true,
+        chat: true,
+        contactos: true,
+        oportunidades: true,
+        pedidos: true,
+        ventas: true,
+        productos: true,
+        inventarios: userRole === "OPERACIONES" || userRole === "ADMIN",
+        finanzas: userRole === "FINANZAS" || userRole === "ADMIN",
+        personal: userRole === "ADMIN",
+        admin: userRole === "ADMIN",
+        sales_scope: userRole === "VENDEDOR" ? "own" : userRole === "SUPERVISOR" ? "team" : "all",
+        trabajador_id: userWorker.id,
+        trabajador_nombre: `${userWorker.nombre} ${userWorker.apellido}`.trim(),
+      };
+
+      const payload = {
+        username: userUsername.trim(),
+        password: userPassword.trim(),
+        firstName: userWorker.nombre,
+        lastName: userWorker.apellido,
+        phone: userWorker.telefono || "",
+        role: userRole,
+        modules: JSON.stringify(modulesPayload),
+      };
+
+      const res = await api.post("/api/users", payload);
+      if (res.status === 200 || res.status === 201) {
+        toast.success(`¡Usuario @${userUsername.trim()} creado y vinculado con éxito a ${userWorker.nombre}!`);
+        setUserModalOpen(false);
+        fetchData();
+      } else {
+        toast.error("No se pudo crear el usuario.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data || "Error al crear el usuario.");
+    } finally {
+      setUserSaving(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -370,6 +468,21 @@ export default function StaffPage() {
                             Tel: {w.telefono}
                           </span>
                         )}
+                        {w.usuario_username ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 w-fit mt-1">
+                            <UserCheck className="size-3 text-emerald-600" />
+                            @{w.usuario_username}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCreateUser(w)}
+                            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-emerald-600 hover:underline mt-1 w-fit"
+                          >
+                            <UserPlus className="size-3 text-emerald-500" />
+                            + Crear usuario CRM
+                          </button>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-muted-foreground">{w.dni}</TableCell>
@@ -418,6 +531,15 @@ export default function StaffPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenCreateUser(w)}
+                          className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                          title={w.usuario_username ? `Usuario CRM: @${w.usuario_username}` : "Crear usuario de acceso al CRM"}
+                        >
+                          <UserPlus className="size-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -642,6 +764,114 @@ export default function StaffPage() {
               {saving ? "Guardando..." : isEdit ? "Actualizar Colaborador" : "Registrar Colaborador"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* =========================================================================
+          MODAL: CREAR O VINCULAR USUARIO CRM DESDE COLABORADOR
+      ========================================================================= */}
+      <Dialog open={userModalOpen} onOpenChange={setUserModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <UserPlus className="size-5 text-emerald-600" />
+              Crear Usuario CRM para Colaborador
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Genera una cuenta de acceso al sistema vinculada a{" "}
+              <strong className="text-foreground">
+                {userWorker?.nombre} {userWorker?.apellido}
+              </strong>{" "}
+              (DNI: {userWorker?.dni}).
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveCrmUser} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="crm_username" className="text-xs font-semibold">
+                Nombre de Usuario <span className="text-rose-500">*</span>
+              </Label>
+              <Input
+                id="crm_username"
+                value={userUsername}
+                onChange={(e) => setUserUsername(e.target.value)}
+                placeholder="ej: carlos.benavides"
+                required
+                className="h-9 text-xs"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Se usará para iniciar sesión en la plataforma CRM.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="crm_password" className="text-xs font-semibold">
+                  Contraseña Inicial <span className="text-rose-500">*</span>
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => setShowUserPassword(!showUserPassword)}
+                  className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  {showUserPassword ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+                  {showUserPassword ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
+              <Input
+                id="crm_password"
+                type={showUserPassword ? "text" : "password"}
+                value={userPassword}
+                onChange={(e) => setUserPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="crm_role" className="text-xs font-semibold">
+                Rol de Acceso en CRM <span className="text-rose-500">*</span>
+              </Label>
+              <select
+                id="crm_role"
+                value={userRole}
+                onChange={(e) => setUserRole(e.target.value)}
+                className="w-full h-9 px-3 rounded-md border border-input bg-background text-xs font-medium focus:ring-1 focus:ring-primary"
+              >
+                <option value="VENDEDOR">Vendedor / Asesor (Solo sus propias ventas)</option>
+                <option value="SUPERVISOR">Supervisor (Ventas de todo su equipo)</option>
+                <option value="OPERACIONES">Operaciones / Logística (Pedidos y entregas)</option>
+                <option value="FINANZAS">Finanzas & Caja (Flujo de caja y comisiones)</option>
+                <option value="ADMIN">Administrador Total (Acceso global)</option>
+              </select>
+            </div>
+
+            <div className="p-3 bg-muted/40 rounded-lg border text-[11px] space-y-1 text-muted-foreground">
+              <div className="font-semibold text-foreground flex items-center gap-1.5">
+                <Shield className="size-3.5 text-emerald-600" />
+                Vinculación Automática
+              </div>
+              <p>
+                Al crear la cuenta, las ventas, oportunidades y comisiones que registre este usuario
+                se asociarán automáticamente a su ficha de colaborador en planilla.
+              </p>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setUserModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={userSaving}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+              >
+                {userSaving ? "Creando..." : "Crear y Vincular Cuenta"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

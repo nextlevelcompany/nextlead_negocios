@@ -66,6 +66,16 @@ public class UsersController {
             java.util.Optional<User> createdOpt = userDao.findByUsername(newUser.getUsername().trim());
             if (createdOpt.isPresent()) {
                 User created = createdOpt.get();
+                // Sincronizar trabajadores.usuario_id si viene trabajador_id en modules
+                if (newUser.getModules() != null && newUser.getModules().contains("\"trabajador_id\":")) {
+                    try {
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"trabajador_id\"\\s*:\\s*(\\d+)").matcher(newUser.getModules());
+                        if (m.find()) {
+                            long trabId = Long.parseLong(m.group(1));
+                            jdbcTemplate.update("UPDATE trabajadores SET usuario_id = ? WHERE id = ?", created.getId(), trabId);
+                        }
+                    } catch (Exception ignored) {}
+                }
                 created.setPassword(null);
                 return new ResponseEntity<>(created, HttpStatus.CREATED);
             }
@@ -112,6 +122,14 @@ public class UsersController {
             }
             if (updatedUser.getModules() != null) {
                 existingUser.setModules(updatedUser.getModules());
+                // Sincronizar trabajadores.usuario_id si viene trabajador_id
+                try {
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"trabajador_id\"\\s*:\\s*(\\d+)").matcher(updatedUser.getModules());
+                    if (m.find()) {
+                        long trabId = Long.parseLong(m.group(1));
+                        jdbcTemplate.update("UPDATE trabajadores SET usuario_id = ? WHERE id = ?", existingUser.getId(), trabId);
+                    }
+                } catch (Exception ignored) {}
             }
 
             userDao.update(existingUser);

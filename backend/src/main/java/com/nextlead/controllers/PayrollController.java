@@ -51,11 +51,13 @@ public class PayrollController {
     public ResponseEntity<?> getStaff(@RequestParam(value = "estado", required = false) String estado) {
         try {
             String sql = "SELECT t.*, a.nombre as afp_nombre, p.nombre as perfil_nombre, " +
-                         "TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre " +
+                         "TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre, " +
+                         "u.username as usuario_username " +
                          "FROM trabajadores t " +
                          "LEFT JOIN afp_maestra a ON t.afp_id = a.id " +
                          "LEFT JOIN rentabilidad_perfiles p ON t.perfil_comision_id = p.id " +
-                         "LEFT JOIN trabajadores sup ON t.supervisor_id = sup.id";
+                         "LEFT JOIN trabajadores sup ON t.supervisor_id = sup.id " +
+                         "LEFT JOIN users u ON t.usuario_id = u.id";
             List<Map<String, Object>> list;
             if (estado != null && !estado.trim().isEmpty() && !"all".equalsIgnoreCase(estado)) {
                 sql += " WHERE t.estado = ? ORDER BY t.nombre ASC";

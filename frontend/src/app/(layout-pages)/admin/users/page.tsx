@@ -88,6 +88,7 @@ export interface WorkerItem {
   rol_operativo: string;
   equipo?: string;
   dni?: string;
+  telefono?: string;
   usuario_id?: number | null;
 }
 
@@ -1195,7 +1196,34 @@ export default function UsersManagementPage() {
                     id="form_worker"
                     className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:ring-1 focus:ring-primary"
                     value={formTrabajadorId}
-                    onChange={(e) => setFormTrabajadorId(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormTrabajadorId(val);
+                      if (val !== "none") {
+                        const w = staffList.find((item) => String(item.id) === val);
+                        if (w) {
+                          if (!formFirstName) setFormFirstName(w.nombre);
+                          if (!formLastName) setFormLastName(w.apellido);
+                          if (!formPhone && w.telefono) setFormPhone(w.telefono);
+                          if (!formUsername && !isEdit) {
+                            const cleanN = (w.nombre || "").trim().toLowerCase().split(" ")[0];
+                            const cleanA = (w.apellido || "").trim().toLowerCase().split(" ")[0];
+                            const suggested = cleanN && cleanA ? `${cleanN}.${cleanA}`.replace(/[^a-z0-9.]/g, "") : `user.${w.dni || w.id}`;
+                            setFormUsername(suggested);
+                          }
+                          const op = (w.rol_operativo || "").toLowerCase();
+                          if (op.includes("vendedor") || op.includes("asesor") || op.includes("comercial") || op.includes("ventas")) {
+                            handleRoleChange("VENDEDOR");
+                          } else if (op.includes("supervis") || op.includes("jefe") || op.includes("lider")) {
+                            handleRoleChange("SUPERVISOR");
+                          } else if (op.includes("finan") || op.includes("caja") || op.includes("conta")) {
+                            handleRoleChange("FINANZAS");
+                          } else if (op.includes("opera") || op.includes("logist") || op.includes("chofer") || op.includes("almacen")) {
+                            handleRoleChange("OPERACIONES");
+                          }
+                        }
+                      }
+                    }}
                   >
                     <option value="none">-- Sin vincular a personal --</option>
                     {staffList.map((w) => (
