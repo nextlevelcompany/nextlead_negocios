@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
+import { useRolePermissions } from "@/lib/permissions";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
@@ -60,6 +61,7 @@ import {
 } from "lucide-react";
 
 export default function PedidosViewPage() {
+  const { can, isAdmin, loading: permsLoading } = useRolePermissions();
   const [data, setData] = useState<{
     columns: any[];
     pedidos: any[];
@@ -144,8 +146,12 @@ export default function PedidosViewPage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (!permsLoading && (isAdmin || can("pedidos", "ver"))) {
+      loadData();
+    } else if (!permsLoading && !isAdmin && !can("pedidos", "ver")) {
+      setLoading(false);
+    }
+  }, [permsLoading, isAdmin, can]);
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -445,6 +451,25 @@ export default function PedidosViewPage() {
     (acc, curr) => acc + (Number(curr.subtotal) > 0 ? Number(curr.subtotal) : Number(curr.total || 0) / 1.18),
     0
   );
+
+  if (!permsLoading && !isAdmin && !can("pedidos", "ver")) {
+    return (
+      <div className="p-8 max-w-md mx-auto text-center space-y-4 pt-16">
+        <div className="size-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-sm">
+          <Truck className="size-8" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Acceso Restringido a Pedidos</h2>
+        <p className="text-sm text-muted-foreground">
+          Tu rol de usuario actual no tiene autorización para consultar o gestionar el módulo de logística y pedidos.
+        </p>
+        <div className="pt-2">
+          <Button asChild variant="default">
+            <Link href="/dashboard/analytics">Volver al Panel Principal</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 w-full max-w-full min-w-0">

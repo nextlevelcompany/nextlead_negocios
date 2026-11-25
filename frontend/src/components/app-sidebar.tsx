@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRolePermissions } from "@/lib/permissions"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -332,7 +333,7 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
 export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   const [gestionaStock, setGestionaStock] = React.useState<boolean>(false)
   const [tipoModelo, setTipoModelo] = React.useState<string>("TELECOM")
-  const [currentUser, setCurrentUser] = React.useState<any>(null)
+  const { can, hasModule, isAdmin, role } = useRolePermissions()
 
   React.useEffect(() => {
     const updateFromSettings = () => {
@@ -340,14 +341,8 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       if (typeof window !== "undefined") {
         const cachedModel = localStorage.getItem("negocio.tipo_modelo")
         const cachedStock = localStorage.getItem("negocio.gestiona_stock")
-        const cachedUser = localStorage.getItem("crm_active_user")
         if (cachedModel) setTipoModelo(cachedModel)
         if (cachedStock !== null) setGestionaStock(cachedStock === "true")
-        if (cachedUser) {
-          try {
-            setCurrentUser(JSON.parse(cachedUser))
-          } catch {}
-        }
       }
 
       // 2. Consultar API para sincronizar
@@ -385,166 +380,212 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     }
   }, [])
 
-  // Filtrar modularmente los menús según el modelo de negocio y roles del usuario
+  // Filtrar modularmente los menús según el modelo de negocio y permisos del rol del usuario
   const filteredNavGroups = React.useMemo(() => {
-    const role = (currentUser?.role || "ADMIN").toUpperCase()
-    const modulesStr = currentUser?.modules
-    let permissions: any = {}
-    if (modulesStr) {
-      try {
-        permissions = typeof modulesStr === "string" ? JSON.parse(modulesStr) : modulesStr
-      } catch {}
-    }
-    const isAdmin = role === "ADMIN"
-    const isSupervisor = role === "SUPERVISOR"
-    const isVendedor = role === "VENDEDOR"
-    const isFinanzas = role === "FINANZAS"
-    const isOperaciones = role === "OPERACIONES"
-
     return data.navGroups
       .map((group) => {
-        // 1. Grupo SISTEMA: Solo visible para administradores o permisos expresos de gestión
-        if (group.label === "SISTEMA") {
-          if (!isAdmin && !permissions.can_manage_users) {
-            return null
-          }
-        }
-
-        // 2. Grupo GESTIÓN: Finanzas, Rentabilidad, Personal
-        if (group.label === "GESTIÓN") {
-          if ((isVendedor || isOperaciones) && !permissions.can_view_finance && !permissions.can_view_profitability) {
-            return null
-          }
-          return {
-            ...group,
-            items: group.items
-              .filter((item) => {
-                if (item.title === "Finanzas") {
-                  return isAdmin || isSupervisor || isFinanzas || permissions.can_view_finance
-                }
-                if (item.title === "Rentabilidad y Comisiones") {
-                  return isAdmin || isSupervisor || isFinanzas || permissions.can_view_profitability
-                }
-                if (item.title === "Personal") {
-                  return isAdmin || isSupervisor || isFinanzas
-                }
-                return true
-              })
-              .map((item) => {
-                if (item.title === "Finanzas") {
-                  return {
-                    ...item,
-                    items: item.items.filter((sub) => {
-                      if (sub.title === "Compras" && tipoModelo === "TELECOM" && !gestionaStock) {
-                        return false
-                      }
-                      return true
-                    }),
-                  }
-                }
-                return item
-              }),
-          }
-        }
-
-        // 3. Grupo COMERCIAL: WhatsApp, Contactos, Oportunidades, Ventas
-        if (group.label === "COMERCIAL") {
-          return {
-            ...group,
-            items: group.items
-              .filter((item) => {
-                // Finanzas no requiere WhatsApp ni Oportunidades comerciales
-                if (isFinanzas && (item.title === "WhatsApp" || item.title === "Oportunidades")) {
-                  return false
-                }
-                // Operaciones no requiere Oportunidades
-                if (isOperaciones && item.title === "Oportunidades") {
-                  return false
-                }
-                return true
-              })
-              .map((item) => {
-                if (item.title === "Contactos") {
-                  return {
-                    ...item,
-                    items: item.items.filter((sub) => {
-                      // Solo Admin y Supervisor pueden reasignar cartera global
-                      if (sub.title === "Asignación de Cartera" && !isAdmin && !isSupervisor) {
-                        return false
-                      }
-                      return true
-                    }),
-                  }
-                }
-                if (item.title === "Oportunidades") {
-                  return {
-                    ...item,
-                    items: item.items.filter((sub) => {
-                      // Configuración de embudos solo para administradores
-                      if (sub.title === "Configuración" && !isAdmin) {
-                        return false
-                      }
-                      // Reportes globales no visibles para vendedores simples
-                      if (sub.title === "Reportes" && isVendedor) {
-                        return false
-                      }
-                      return true
-                    }),
-                  }
-                }
-                if (item.title === "Ventas") {
-                  return {
-                    ...item,
-                    items: item.items.filter((sub) => {
-                      if (sub.title === "Reportes" && isVendedor) {
-                        return false
-                      }
-                      return true
-                    }),
-                  }
-                }
-                return item
-              }),
-          }
-        }
-
-        // 4. Grupo OPERACIONES: Pedidos, Productos
-        if (group.label === "OPERACIONES") {
-          return {
-            ...group,
-            items: group.items.map((item) => {
-              if (item.title === "Pedidos") {
-                return {
-                  ...item,
-                  items: item.items.filter((sub) => {
-                    if (sub.title === "Reportes" && isVendedor) {
-                      return false
-                    }
-                    return true
-                  }),
-                }
-              }
-              if (item.title === "Productos") {
-                return {
-                  ...item,
-                  items: item.items.filter((sub) => {
-                    // Gestión de Categorías solo para Administradores y Operaciones
-                    if (sub.title === "Categorías" && !isAdmin && !isOperaciones) {
-                      return false
-                    }
-                    return true
-                  }),
-                }
+        // 1. Grupo PRINCIPAL: Dashboard
+        if (group.label === "PRINCIPAL") {
+          if (!hasModule("dashboard")) return null
+          const items = group.items
+            .map((item) => {
+              if (item.title === "Dashboard") {
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Analítica") return can("dashboard", "ver_analitica")
+                  if (sub.title === "Métricas") return can("dashboard", "ver_metricas")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
               }
               return item
-            }),
-          }
+            })
+            .filter(Boolean) as typeof group.items
+          if (items.length === 0) return null
+          return { ...group, items }
+        }
+
+        // 2. Grupo COMERCIAL: WhatsApp, Contactos, Oportunidades, Ventas
+        if (group.label === "COMERCIAL") {
+          const items = group.items
+            .map((item) => {
+              // WhatsApp
+              if (item.title === "WhatsApp") {
+                if (!hasModule("whatsapp") || !can("whatsapp", "chat")) return null
+                return item
+              }
+
+              // Contactos
+              if (item.title === "Contactos") {
+                if (!hasModule("clientes")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Contactos") return isAdmin || can("clientes", "ver_todos") || role === "VENDEDOR" || role === "SUPERVISOR"
+                  if (sub.title === "Crear Contacto") return can("clientes", "crear")
+                  if (sub.title === "Asignación de Cartera") return isAdmin || can("clientes", "asignar_cartera")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+
+              // Oportunidades
+              if (item.title === "Oportunidades") {
+                if (!hasModule("oportunidades") || (!can("oportunidades", "ver") && !can("oportunidades", "crear"))) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Oportunidades") return can("oportunidades", "ver")
+                  if (sub.title === "Crear Oportunidad") return can("oportunidades", "crear")
+                  if (sub.title === "Reportes") return can("oportunidades", "exportar") && role !== "VENDEDOR"
+                  if (sub.title === "Configuración") return isAdmin || can("oportunidades", "configurar")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+
+              // Ventas
+              if (item.title === "Ventas") {
+                if (!hasModule("ventas") || (!can("ventas", "ver") && !can("ventas", "crear"))) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Ventas") return can("ventas", "ver")
+                  if (sub.title === "Crear Venta") return can("ventas", "crear")
+                  if (sub.title === "Reportes") return can("ventas", "exportar") && role !== "VENDEDOR"
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+
+              return item
+            })
+            .filter(Boolean) as typeof group.items
+
+          if (items.length === 0) return null
+          return { ...group, items }
+        }
+
+        // 3. Grupo OPERACIONES: Pedidos, Productos
+        if (group.label === "OPERACIONES") {
+          const items = group.items
+            .map((item) => {
+              // Pedidos: Si no tiene permiso de módulo o ver/crear están apagados, desaparece
+              if (item.title === "Pedidos") {
+                if (!hasModule("pedidos") || (!can("pedidos", "ver") && !can("pedidos", "crear"))) {
+                  return null
+                }
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Pedidos") return can("pedidos", "ver")
+                  if (sub.title === "Crear Pedido") return can("pedidos", "crear")
+                  if (sub.title === "Reportes") return can("pedidos", "ver") && role !== "VENDEDOR"
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+
+              // Productos
+              if (item.title === "Productos") {
+                if (!hasModule("productos")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Catálogo") return can("productos", "ver_catalogo")
+                  if (sub.title === "Categorías") return isAdmin || can("productos", "gestionar_categorias")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+
+              return item
+            })
+            .filter(Boolean) as typeof group.items
+
+          if (items.length === 0) return null
+          return { ...group, items }
+        }
+
+        // 4. Grupo GESTIÓN: Finanzas, Rentabilidad, Personal
+        if (group.label === "GESTIÓN") {
+          const items = group.items
+            .map((item) => {
+              // Finanzas
+              if (item.title === "Finanzas") {
+                if (!hasModule("finanzas")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Caja") return can("finanzas", "ver_flujo")
+                  if (sub.title === "Gastos") return can("finanzas", "gastos")
+                  if (sub.title === "Compras") return can("finanzas", "compras") && (tipoModelo !== "TELECOM" || gestionaStock)
+                  if (sub.title === "Deudas") return can("finanzas", "deudas")
+                  if (sub.title === "Proveedores") return can("finanzas", "compras") || can("finanzas", "gastos")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+
+              // Rentabilidad y Comisiones
+              if (item.title === "Rentabilidad y Comisiones") {
+                if (!hasModule("rentabilidad")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Rentabilidad Actual") return can("rentabilidad", "ver_margenes")
+                  if (sub.title === "Simulador de Ingresos") return can("rentabilidad", "simulador")
+                  if (sub.title === "Liquidaciones y Pagos") return can("rentabilidad", "ver_costos")
+                  if (sub.title === "Configuración y Escalas") return isAdmin || can("rentabilidad", "configurar_perfiles")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+
+              // Personal
+              if (item.title === "Personal") {
+                if (!hasModule("payroll")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Empleados") return can("payroll", "ver_personal")
+                  if (sub.title === "Asistencia Diaria") return can("payroll", "asistencia")
+                  if (sub.title === "Asistencia Mensual") return can("payroll", "asistencia")
+                  if (sub.title === "Comisiones") return can("payroll", "pagar_comisiones") || can("payroll", "ver_liquidaciones")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+
+              return item
+            })
+            .filter(Boolean) as typeof group.items
+
+          if (items.length === 0) return null
+          return { ...group, items }
+        }
+
+        // 5. Grupo SISTEMA: Ajustes
+        if (group.label === "SISTEMA") {
+          if (!isAdmin && !hasModule("admin")) return null
+          const items = group.items
+            .map((item) => {
+              if (item.title === "Ajustes") {
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Usuarios") return isAdmin || can("admin", "gestionar_usuarios")
+                  if (sub.title === "Roles") return isAdmin || can("admin", "gestionar_roles")
+                  if (sub.title === "WhatsApp & IA" || sub.title === "Parámetros" || sub.title === "Flota" || sub.title === "Zonas" || sub.title === "Modelo de Negocio" || sub.title === "General") {
+                    return isAdmin || can("admin", "ajustes_sistema")
+                  }
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              return item
+            })
+            .filter(Boolean) as typeof group.items
+
+          if (items.length === 0) return null
+          return { ...group, items }
         }
 
         return group
       })
       .filter(Boolean) as typeof data.navGroups
-  }, [tipoModelo, gestionaStock, currentUser])
+  }, [tipoModelo, gestionaStock, can, hasModule, isAdmin, role])
 
   return (
      <div

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { saveRolePermissionsCache } from "@/lib/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -305,6 +306,7 @@ export default function RolesManagementPage() {
       };
 
       await api.put(`/api/admin/roles/${currentRole.codigo}`, payload);
+      saveRolePermissionsCache(currentRole.codigo, activePerms);
       toast.success(`Permisos del rol [${currentRole.codigo}] guardados con éxito.`);
 
       // Actualizar estado local

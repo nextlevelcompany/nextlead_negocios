@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
+import { useRolePermissions } from "@/lib/permissions";
 import { toast } from "sonner";
 import {
   Card,
@@ -74,6 +75,7 @@ function CreatePedidoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit_id");
+  const { can, isAdmin, loading: permsLoading } = useRolePermissions();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,6 +122,10 @@ function CreatePedidoContent() {
 
   // Load Initial Metadata
   useEffect(() => {
+    if (!permsLoading && !isAdmin && !can("pedidos", "crear") && !can("pedidos", "editar")) {
+      setLoading(false);
+      return;
+    }
     const fetchMasters = async () => {
       setLoading(true);
       try {
@@ -213,7 +219,7 @@ function CreatePedidoContent() {
     };
 
     fetchMasters();
-  }, [editId]);
+  }, [editId, permsLoading, isAdmin, can]);
 
   // Load contact details, addresses, and secondary contacts
   const loadContactDetails = async (contactId: number) => {
@@ -417,6 +423,25 @@ function CreatePedidoContent() {
       <div className="flex items-center justify-center min-h-[50vh] text-muted-foreground text-sm">
         <RefreshCw className="size-5 animate-spin mr-2" />
         Cargando datos maestros y logística...
+      </div>
+    );
+  }
+
+  if (!permsLoading && !isAdmin && !can("pedidos", "crear") && !can("pedidos", "editar")) {
+    return (
+      <div className="p-8 max-w-md mx-auto text-center space-y-4 pt-16">
+        <div className="size-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-sm">
+          <Truck className="size-8" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Acceso Restringido a Pedidos</h2>
+        <p className="text-sm text-muted-foreground">
+          Tu rol de usuario actual no tiene autorización para registrar o modificar pedidos logísticos.
+        </p>
+        <div className="pt-2">
+          <Button asChild variant="default">
+            <Link href="/dashboard/analytics">Volver al Panel Principal</Link>
+          </Button>
+        </div>
       </div>
     );
   }

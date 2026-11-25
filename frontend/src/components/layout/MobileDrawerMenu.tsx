@@ -1,8 +1,9 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useMemo } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useRolePermissions } from "@/lib/permissions"
 import {
   Sheet,
   SheetContent,
@@ -197,10 +198,187 @@ const navSecondary = [
 
 export function MobileDrawerMenu({ open, onOpenChange }: MobileDrawerMenuProps) {
   const pathname = usePathname()
+  const { can, hasModule, isAdmin, role } = useRolePermissions()
+
+  const filteredNavGroups = useMemo(() => {
+    return fullNavGroups
+      .map((group) => {
+        if (group.label === "PRINCIPAL") {
+          if (!hasModule("dashboard")) return null
+          const items = group.items
+            .map((item) => {
+              if (item.title === "Dashboard") {
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Analítica") return can("dashboard", "ver_analitica")
+                  if (sub.title === "Métricas") return can("dashboard", "ver_metricas")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              return item
+            })
+            .filter(Boolean) as NavItem[]
+          if (items.length === 0) return null
+          return { ...group, items }
+        }
+
+        if (group.label === "COMERCIAL") {
+          const items = group.items
+            .map((item) => {
+              if (item.title === "WhatsApp") {
+                if (!hasModule("whatsapp") || !can("whatsapp", "chat")) return null
+                return item
+              }
+              if (item.title === "Contactos") {
+                if (!hasModule("clientes")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Contactos") return isAdmin || can("clientes", "ver_todos") || role === "VENDEDOR" || role === "SUPERVISOR"
+                  if (sub.title === "Crear Contacto") return can("clientes", "crear")
+                  if (sub.title === "Asignación de Cartera") return isAdmin || can("clientes", "asignar_cartera")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              if (item.title === "Oportunidades") {
+                if (!hasModule("oportunidades") || (!can("oportunidades", "ver") && !can("oportunidades", "crear"))) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Oportunidades") return can("oportunidades", "ver")
+                  if (sub.title === "Crear Oportunidad") return can("oportunidades", "crear")
+                  if (sub.title === "Reportes") return can("oportunidades", "exportar") && role !== "VENDEDOR"
+                  if (sub.title === "Configuración") return isAdmin || can("oportunidades", "configurar")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              if (item.title === "Ventas") {
+                if (!hasModule("ventas") || (!can("ventas", "ver") && !can("ventas", "crear"))) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Ventas") return can("ventas", "ver")
+                  if (sub.title === "Crear Venta") return can("ventas", "crear")
+                  if (sub.title === "Reportes") return can("ventas", "exportar") && role !== "VENDEDOR"
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              return item
+            })
+            .filter(Boolean) as NavItem[]
+          if (items.length === 0) return null
+          return { ...group, items }
+        }
+
+        if (group.label === "OPERACIONES") {
+          const items = group.items
+            .map((item) => {
+              if (item.title === "Pedidos") {
+                if (!hasModule("pedidos") || (!can("pedidos", "ver") && !can("pedidos", "crear"))) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Pedidos") return can("pedidos", "ver")
+                  if (sub.title === "Crear Pedido") return can("pedidos", "crear")
+                  if (sub.title === "Reportes") return can("pedidos", "ver") && role !== "VENDEDOR"
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              if (item.title === "Productos") {
+                if (!hasModule("productos")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Catálogo") return can("productos", "ver_catalogo")
+                  if (sub.title === "Categorías") return isAdmin || can("productos", "gestionar_categorias")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              return item
+            })
+            .filter(Boolean) as NavItem[]
+          if (items.length === 0) return null
+          return { ...group, items }
+        }
+
+        if (group.label === "GESTIÓN") {
+          const items = group.items
+            .map((item) => {
+              if (item.title === "Finanzas") {
+                if (!hasModule("finanzas")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Caja") return can("finanzas", "ver_flujo")
+                  if (sub.title === "Gastos") return can("finanzas", "gastos")
+                  if (sub.title === "Compras") return can("finanzas", "compras")
+                  if (sub.title === "Deudas") return can("finanzas", "deudas")
+                  if (sub.title === "Proveedores") return can("finanzas", "compras") || can("finanzas", "gastos")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              if (item.title === "Rentabilidad y Comisiones") {
+                if (!hasModule("rentabilidad")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Rentabilidad Actual") return can("rentabilidad", "ver_margenes")
+                  if (sub.title === "Simulador de Ingresos") return can("rentabilidad", "simulador")
+                  if (sub.title === "Liquidaciones y Pagos") return can("rentabilidad", "ver_costos")
+                  if (sub.title === "Configuración y Escalas") return isAdmin || can("rentabilidad", "configurar_perfiles")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              if (item.title === "Personal") {
+                if (!hasModule("payroll")) return null
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Empleados") return can("payroll", "ver_personal")
+                  if (sub.title === "Asistencia Diaria") return can("payroll", "asistencia")
+                  if (sub.title === "Asistencia Mensual") return can("payroll", "asistencia")
+                  if (sub.title === "Comisiones") return can("payroll", "pagar_comisiones") || can("payroll", "ver_liquidaciones")
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              return item
+            })
+            .filter(Boolean) as NavItem[]
+          if (items.length === 0) return null
+          return { ...group, items }
+        }
+
+        if (group.label === "SISTEMA") {
+          if (!isAdmin && !hasModule("admin")) return null
+          const items = group.items
+            .map((item) => {
+              if (item.title === "Ajustes") {
+                const subs = item.items?.filter((sub) => {
+                  if (sub.title === "Usuarios") return isAdmin || can("admin", "gestionar_usuarios")
+                  if (sub.title === "Roles") return isAdmin || can("admin", "gestionar_roles")
+                  if (sub.title === "WhatsApp & IA" || sub.title === "Parámetros" || sub.title === "Flota" || sub.title === "Zonas" || sub.title === "Modelo de Negocio" || sub.title === "General") {
+                    return isAdmin || can("admin", "ajustes_sistema")
+                  }
+                  return true
+                }) || []
+                if (subs.length === 0) return null
+                return { ...item, items: subs }
+              }
+              return item
+            })
+            .filter(Boolean) as NavItem[]
+          if (items.length === 0) return null
+          return { ...group, items }
+        }
+
+        return group
+      })
+      .filter(Boolean) as NavGroup[]
+  }, [can, hasModule, isAdmin, role])
 
   // Track expanded state of sections
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
-    // Default open section matching current path
     const initial: Record<string, boolean> = {}
     fullNavGroups.forEach((group) => {
       group.items.forEach((item) => {
@@ -248,7 +426,7 @@ export function MobileDrawerMenu({ open, onOpenChange }: MobileDrawerMenuProps) 
 
         {/* Scrollable Navigation List */}
         <div className="flex-1 overflow-y-auto px-3.5 py-3 space-y-4 smooth-scroll">
-          {fullNavGroups.map((group) => (
+          {filteredNavGroups.map((group) => (
             <div key={group.label} className="space-y-1">
               <h4 className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider px-2 py-1">
                 {group.label}
