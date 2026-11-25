@@ -28,7 +28,7 @@ export interface OpportunityWhatsAppParams {
   notas?: string;
 }
 
-export function buildOpportunityWhatsAppMessage(p: OpportunityWhatsAppParams): string {
+export function buildOpportunityWhatsAppMessage(p: OpportunityWhatsAppParams, includeConditions = false): string {
   const currencySymbol = p.moneda === "Dólares" ? "$" : "S/";
   const fmt = (num?: number) =>
     (num || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -90,21 +90,36 @@ export function buildOpportunityWhatsAppMessage(p: OpportunityWhatsAppParams): s
     if (p.asesor_email) lines.push(`• *Correo:* ${p.asesor_email}`);
   }
 
-  if (p.condiciones) {
-    lines.push("");
-    lines.push("📝 *Condiciones Comerciales:*");
-    lines.push(p.condiciones);
-  }
-
   if (p.notas) {
     lines.push("");
     lines.push("📌 *Notas Adicionales:*");
     lines.push(p.notas);
   }
 
+  if (includeConditions && p.condiciones) {
+    lines.push("");
+    lines.push("📝 *Condiciones Comerciales:*");
+    lines.push(p.condiciones);
+  }
+
   lines.push("━━━━━━━━━━━━━━━━━━━━━━━━");
   lines.push("✨ _Generado desde NextLead Negocios_");
 
+  return lines.join("\n");
+}
+
+export function buildOpportunityConditionsMessage(p: OpportunityWhatsAppParams): string {
+  const lines: string[] = [];
+  lines.push("📝 *TÉRMINOS Y CONDICIONES COMERCIALES*");
+  if (p.id) lines.push(`*Oportunidad:* #${p.id}`);
+  if (p.empresa) lines.push(`*Cliente:* ${p.empresa}`);
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━");
+  if (p.condiciones) {
+    lines.push(p.condiciones);
+  } else {
+    lines.push("No se registraron condiciones adicionales específicas.");
+  }
+  lines.push("━━━━━━━━━━━━━━━━━━━━━━━━");
   return lines.join("\n");
 }
 
