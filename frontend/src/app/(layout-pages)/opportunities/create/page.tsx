@@ -151,7 +151,7 @@ function CreateOpportunityContent() {
       setLoading(true);
       try {
         const [oppRes, prodRes, setRes, ubiRes] = await Promise.all([
-          api.get("/api/opportunities/kanban"),
+          api.get("/api/opportunities/kanban?includeContacts=true"),
           api.get("/api/productos"),
           api.get("/api/opportunities/settings"),
           api.get("/api/contacts/ubigeos"),

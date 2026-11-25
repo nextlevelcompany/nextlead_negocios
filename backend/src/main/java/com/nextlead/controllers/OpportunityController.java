@@ -80,7 +80,7 @@ public class OpportunityController {
     // 1. KANBAN BOARD DATA BUNDLE
     // ==========================================
     @GetMapping("/kanban")
-    public ResponseEntity<?> getKanbanData() {
+    public ResponseEntity<?> getKanbanData(@RequestParam(value = "includeContacts", defaultValue = "false") boolean includeContacts) {
         try {
             // Auto hot migration: Ensure columns exist
             try {
@@ -153,26 +153,31 @@ public class OpportunityController {
                 "SELECT * FROM kanban_etiquetas ORDER BY nombre ASC"
             );
 
-            // Contacts for dropdown: If scope is own, only assigned contacts
-            String contactsSql =
-                "SELECT c.id, c.tipo_persona, c.numero_documento, c.telefono_principal, c.email, " +
-                "       c.razon_social, c.nombres, c.apellidos, c.empresa_id, " +
-                "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as display_name, " +
-                "       e.razon_social as empresa_padre_nombre " +
-                "FROM contacts c " +
-                "LEFT JOIN contacts e ON c.empresa_id = e.id ";
+            // Contacts for dropdown: Only when includeContacts is requested (e.g. in create form)
+            List<Map<String, Object>> contacts;
+            if (includeContacts) {
+                String contactsSql =
+                    "SELECT c.id, c.tipo_persona, c.numero_documento, c.telefono_principal, c.email, " +
+                    "       c.razon_social, c.nombres, c.apellidos, c.empresa_id, " +
+                    "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as display_name, " +
+                    "       e.razon_social as empresa_padre_nombre " +
+                    "FROM contacts c " +
+                    "LEFT JOIN contacts e ON c.empresa_id = e.id ";
 
-            List<Object> contactsParams = new ArrayList<>();
-            if ("own".equals(scope)) {
-                contactsSql += "WHERE (c.asignado_a_id = ? OR c.trabajador_id = ?) ";
-                contactsParams.add(authTrabajadorId != null ? authTrabajadorId.intValue() : (authUsuarioId != null ? authUsuarioId : -1));
-                contactsParams.add(authTrabajadorId != null ? authTrabajadorId.intValue() : -1);
+                List<Object> contactsParams = new ArrayList<>();
+                if ("own".equals(scope)) {
+                    contactsSql += "WHERE (c.asignado_a_id = ? OR c.trabajador_id = ?) ";
+                    contactsParams.add(authTrabajadorId != null ? authTrabajadorId.intValue() : (authUsuarioId != null ? authUsuarioId : -1));
+                    contactsParams.add(authTrabajadorId != null ? authTrabajadorId.intValue() : -1);
+                }
+                contactsSql += "ORDER BY display_name ASC LIMIT 300";
+
+                contacts = contactsParams.isEmpty()
+                    ? jdbcTemplate.queryForList(contactsSql)
+                    : jdbcTemplate.queryForList(contactsSql, contactsParams.toArray());
+            } else {
+                contacts = Collections.emptyList();
             }
-            contactsSql += "ORDER BY display_name ASC";
-
-            List<Map<String, Object>> contacts = contactsParams.isEmpty()
-                ? jdbcTemplate.queryForList(contactsSql)
-                : jdbcTemplate.queryForList(contactsSql, contactsParams.toArray());
 
             // Active Staff for Commercial Filters & Assignment
             String staffSql =
@@ -1026,9 +1031,15 @@ public class OpportunityController {
 
     @DeleteMapping("/tags/{id}")
     @Transactional
-    public ResponseEntity<?> deleteTag(@PathVariable Integer id) {
+    public ResponseEntity<?> deleteTag(@PathVariable String id) {
         try {
-            int rows = jdbcTemplate.update("DELETE FROM kanban_etiquetas WHERE id = ?", id);
+            int rows = 0;
+            try {
+                int numericId = Integer.parseInt(id);
+                rows = jdbcTemplate.update("DELETE FROM kanban_etiquetas WHERE id = ?", numericId);
+            } catch (NumberFormatException nfe) {
+                rows = jdbcTemplate.update("DELETE FROM kanban_etiquetas WHERE LOWER(nombre) = LOWER(?)", id.trim());
+            }
             if (rows == 0) {
                 return ResponseEntity.notFound().build();
             }
@@ -1036,6 +1047,19 @@ public class OpportunityController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("message", "Error al eliminar etiqueta: " + e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/{id}/tags")
+    @Transactional
+    public ResponseEntity<?> updateOpportunityTags(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        try {
+            String etiquetas = body != null ? body.get("etiquetas") : null;
+            jdbcTemplate.update("UPDATE oportunidades SET etiquetas = ? WHERE id = ?", etiquetas, id);
+            return ResponseEntity.ok(Map.of("message", "Etiquetas actualizadas con éxito."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al actualizar etiquetas: " + e.getMessage()));
         }
     }
 

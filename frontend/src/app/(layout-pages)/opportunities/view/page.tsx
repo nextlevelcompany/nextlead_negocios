@@ -310,7 +310,7 @@ export default function OpportunitiesKanbanPage() {
     setLoading(true);
     try {
       const [res, staffRes] = await Promise.all([
-        api.get("/api/opportunities/kanban"),
+        api.get("/api/opportunities/kanban?includeContacts=false"),
         api.get("/api/payroll/staff").catch(() => ({ data: [] })),
       ]);
       if (res.data) {
@@ -772,15 +772,46 @@ export default function OpportunitiesKanbanPage() {
     }
   };
 
-  // Delete Tag
+  // Delete Tag from Master Catalog (optimistic without blocking alert)
   const handleDeleteTag = async (id: number) => {
-    if (!confirm("¿Deseas eliminar esta etiqueta?")) return;
+    const previousTags = [...tags];
+    setTags((prev) => prev.filter((t) => t.id !== id));
     try {
       await api.delete(`/api/opportunities/tags/${id}`);
-      toast.success("Etiqueta eliminada.");
-      loadData();
+      toast.success("Etiqueta eliminada del catálogo.");
     } catch (err: any) {
+      setTags(previousTags);
       toast.error(err.response?.data?.message || "No se pudo eliminar la etiqueta.");
+    }
+  };
+
+  // Remove a single tag from an opportunity
+  const handleRemoveTagFromOpportunity = async (
+    e: React.MouseEvent,
+    oppId: number,
+    tagToRemove: string,
+    currentTags?: string | null
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!currentTags) return;
+    const updated = currentTags
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t && t.toLowerCase() !== tagToRemove.toLowerCase())
+      .join(", ");
+
+    // Optimistic UI update
+    setOpportunities((prev) =>
+      prev.map((o) => (o.id === oppId ? { ...o, etiquetas: updated || null } : o))
+    );
+
+    try {
+      await api.patch(`/api/opportunities/${oppId}/tags`, { etiquetas: updated || "" });
+      toast.success(`Etiqueta "${tagToRemove}" quitada de la oportunidad.`);
+    } catch (err) {
+      toast.error("No se pudo actualizar la oportunidad.");
+      loadData();
     }
   };
 
@@ -1699,9 +1730,17 @@ export default function OpportunitiesKanbanPage() {
                                     <Badge
                                       key={idx}
                                       variant="outline"
-                                      className="text-[9px] px-1 py-0 font-normal bg-primary/5 text-primary border-primary/20"
+                                      className="text-[9px] px-1.5 py-0 font-normal bg-primary/5 text-primary border-primary/20 flex items-center gap-1 group/tag"
                                     >
-                                      {cleanTag}
+                                      <span>{cleanTag}</span>
+                                      <button
+                                        type="button"
+                                        title={`Quitar etiqueta "${cleanTag}" de esta oportunidad`}
+                                        className="text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-full px-0.5 leading-none transition-colors"
+                                        onClick={(e) => handleRemoveTagFromOpportunity(e, opp.id, cleanTag, opp.etiquetas)}
+                                      >
+                                        ×
+                                      </button>
                                     </Badge>
                                   );
                                 })}
@@ -2008,12 +2047,24 @@ export default function OpportunitiesKanbanPage() {
                         </TableCell>
                         <TableCell>
                           {opp.etiquetas ? (
-                            <div className="flex flex-wrap gap-1 max-w-[180px]">
-                              {opp.etiquetas.split(",").map((t, i) => (
-                                <Badge key={i} variant="outline" className="text-[9px] px-1 py-0">
-                                  {t.trim()}
-                                </Badge>
-                              ))}
+                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                              {opp.etiquetas.split(",").map((t, i) => {
+                                const cleanTag = t.trim();
+                                if (!cleanTag) return null;
+                                return (
+                                  <Badge key={i} variant="outline" className="text-[9px] px-1.5 py-0 flex items-center gap-1">
+                                    <span>{cleanTag}</span>
+                                    <button
+                                      type="button"
+                                      title={`Quitar etiqueta "${cleanTag}"`}
+                                      className="text-muted-foreground hover:text-red-600 leading-none"
+                                      onClick={(e) => handleRemoveTagFromOpportunity(e, opp.id, cleanTag, opp.etiquetas)}
+                                    >
+                                      ×
+                                    </button>
+                                  </Badge>
+                                );
+                              })}
                             </div>
                           ) : (
                             <span className="text-muted-foreground">-</span>
@@ -2273,9 +2324,10 @@ export default function OpportunitiesKanbanPage() {
                     <button
                       type="button"
                       onClick={() => handleDeleteTag(t.id)}
-                      className="text-muted-foreground hover:text-destructive ml-1"
+                      className="text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 p-0.5 rounded transition-colors ml-1 cursor-pointer"
+                      title="Eliminar etiqueta del catálogo"
                     >
-                      ×
+                      <Trash2 className="size-3 text-red-500 hover:text-red-600" />
                     </button>
                   </div>
                 ))
