@@ -22,8 +22,11 @@ import {
   Upload,
   Image as ImageIcon,
   Link as LinkIcon,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useRolePermissions } from "@/lib/permissions";
+import { ProductWhatsAppModal } from "@/components/productos/ProductWhatsAppModal";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -79,6 +82,9 @@ export interface CategoriaProducto {
 }
 
 export default function ProductosCatalogPage() {
+  const { can, isAdmin } = useRolePermissions();
+  const canGestionar = isAdmin || can("productos", "gestionar_productos");
+
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<CategoriaProducto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +99,15 @@ export default function ProductosCatalogPage() {
 
   // Grid Columns Selector (4, 6, 8 por fila - default 6)
   const [gridColumns, setGridColumns] = useState<4 | 6 | 8>(6);
+
+  // WhatsApp Share Modal
+  const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+  const [selectedProductForWhatsApp, setSelectedProductForWhatsApp] = useState<Producto | null>(null);
+
+  const handleOpenWhatsApp = (p: Producto) => {
+    setSelectedProductForWhatsApp(p);
+    setWhatsAppModalOpen(true);
+  };
 
   // Modal State (Create / Edit)
   const [modalOpen, setModalOpen] = useState(false);
@@ -465,14 +480,16 @@ export default function ProductosCatalogPage() {
             <span>Actualizar</span>
           </Button>
 
-          <Button
-            size="sm"
-            className="h-8 text-xs sm:text-sm gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
-            onClick={handleOpenCreate}
-          >
-            <Plus className="size-4" />
-            <span>Nuevo Producto</span>
-          </Button>
+          {canGestionar && (
+            <Button
+              size="sm"
+              className="h-8 text-xs sm:text-sm gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+              onClick={handleOpenCreate}
+            >
+              <Plus className="size-4" />
+              <span>Nuevo Producto</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -676,18 +693,20 @@ export default function ProductosCatalogPage() {
                 )}
 
                 {/* Botón rápido para cambiar / editar imagen */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenImageEdit(p);
-                  }}
-                  className="absolute bottom-2 left-2 z-10 bg-black/75 hover:bg-black text-white rounded-md px-2 py-1 text-[10px] font-medium backdrop-blur-xs flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity shadow-sm cursor-pointer"
-                  title="Cambiar o subir foto de este producto"
-                >
-                  <Camera className="size-3" />
-                  <span>Editar Foto</span>
-                </button>
+                {canGestionar && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenImageEdit(p);
+                    }}
+                    className="absolute bottom-2 left-2 z-10 bg-black/75 hover:bg-black text-white rounded-md px-2 py-1 text-[10px] font-medium backdrop-blur-xs flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity shadow-sm cursor-pointer"
+                    title="Cambiar o subir foto de este producto"
+                  >
+                    <Camera className="size-3" />
+                    <span>Editar Foto</span>
+                  </button>
+                )}
 
                 {/* Badge de estado de stock en la esquina superior derecha */}
                 <div className="absolute top-2 right-2 z-10 shadow-2xs">
@@ -743,43 +762,59 @@ export default function ProductosCatalogPage() {
                     </span>
                   </div>
 
-                  {/* Botones de acción: Editar, Eliminar y Switch Activo */}
+                  {/* Botones de acción: WSP, y (si tiene permiso) Editar, Eliminar y Switch Activo */}
                   <div className="flex items-center gap-1 shrink-0">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-6 w-6 p-0 text-gray-600 hover:text-emerald-700 hover:border-emerald-300 border-gray-200 dark:border-border"
-                      title="Editar producto"
-                      onClick={() => handleOpenEdit(p)}
+                      className="h-6 px-1.5 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 gap-1 font-medium cursor-pointer"
+                      title="Compartir por WhatsApp con imagen y precio"
+                      onClick={() => handleOpenWhatsApp(p)}
                     >
-                      <Edit2 className="size-3 text-emerald-600" />
+                      <MessageSquare className="size-3 text-emerald-600" />
+                      <span className="text-[10px] font-bold">WSP</span>
                     </Button>
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-6 w-6 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-950/40 border-gray-200 dark:border-border"
-                      title="Eliminar producto"
-                      onClick={() => handleOpenDelete(p)}
-                    >
-                      <Trash2 className="size-3 text-red-500" />
-                    </Button>
+                    {canGestionar && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-gray-600 hover:text-emerald-700 hover:border-emerald-300 border-gray-200 dark:border-border"
+                          title="Editar producto"
+                          onClick={() => handleOpenEdit(p)}
+                        >
+                          <Edit2 className="size-3 text-emerald-600" />
+                        </Button>
 
-                    <Button
-                      type="button"
-                      variant={p.activo ? "ghost" : "secondary"}
-                      size="sm"
-                      className={`h-6 px-1.5 text-[9px] font-semibold rounded-md ${
-                        p.activo
-                          ? "text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20"
-                          : "text-muted-foreground bg-muted hover:bg-muted/80"
-                      }`}
-                      onClick={() => handleToggleActivo(p)}
-                    >
-                      {p.activo ? "Activo" : "Off"}
-                    </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-950/40 border-gray-200 dark:border-border"
+                          title="Eliminar producto"
+                          onClick={() => handleOpenDelete(p)}
+                        >
+                          <Trash2 className="size-3 text-red-500" />
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant={p.activo ? "ghost" : "secondary"}
+                          size="sm"
+                          className={`h-6 px-1.5 text-[9px] font-semibold rounded-md ${
+                            p.activo
+                              ? "text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20"
+                              : "text-muted-foreground bg-muted hover:bg-muted/80"
+                          }`}
+                          onClick={() => handleToggleActivo(p)}
+                        >
+                          {p.activo ? "Activo" : "Off"}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -805,21 +840,25 @@ export default function ProductosCatalogPage() {
             <TableBody>
               {paginatedProducts.map((p) => (
                 <TableRow key={p.id} className="hover:bg-muted/20 transition-colors">
-                  {/* Foto con clic para editar */}
+                  {/* Foto con clic para editar (si puede gestionar) */}
                   <TableCell className="w-12 text-center py-2">
                     <div
-                      onClick={() => handleOpenImageEdit(p)}
-                      className="size-8 rounded-md bg-gray-100 dark:bg-muted/60 overflow-hidden flex items-center justify-center mx-auto border shrink-0 cursor-pointer relative group hover:ring-2 hover:ring-emerald-500 transition-all"
-                      title="Clic para cambiar foto"
+                      onClick={() => canGestionar && handleOpenImageEdit(p)}
+                      className={`size-8 rounded-md bg-gray-100 dark:bg-muted/60 overflow-hidden flex items-center justify-center mx-auto border shrink-0 relative group transition-all ${
+                        canGestionar ? "cursor-pointer hover:ring-2 hover:ring-emerald-500" : ""
+                      }`}
+                      title={canGestionar ? "Clic para cambiar foto" : undefined}
                     >
                       {getImageSrc(p.imagen) ? (
                         <img src={getImageSrc(p.imagen)!} alt={p.nombre} className="w-full h-full object-cover" />
                       ) : (
                         <Boxes className="size-4 text-muted-foreground" />
                       )}
-                      <div className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Camera className="size-3" />
-                      </div>
+                      {canGestionar && (
+                        <div className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Camera className="size-3" />
+                        </div>
+                      )}
                     </div>
                   </TableCell>
 
@@ -865,11 +904,13 @@ export default function ProductosCatalogPage() {
                   <TableCell className="w-20 sm:w-24 text-center py-2 shrink-0">
                     <Badge
                       variant={p.activo ? "default" : "secondary"}
-                      className={`text-[9px] px-2 py-0.5 cursor-pointer whitespace-nowrap ${
+                      className={`text-[9px] px-2 py-0.5 whitespace-nowrap ${
+                        canGestionar ? "cursor-pointer" : ""
+                      } ${
                         p.activo ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
                       }`}
-                      onClick={() => handleToggleActivo(p)}
-                      title="Clic para cambiar estado"
+                      onClick={() => canGestionar && handleToggleActivo(p)}
+                      title={canGestionar ? "Clic para cambiar estado" : undefined}
                     >
                       {p.activo ? "Activo" : "Inactivo"}
                     </Badge>
@@ -881,30 +922,43 @@ export default function ProductosCatalogPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                        title="Cambiar foto del producto"
-                        onClick={() => handleOpenImageEdit(p)}
+                        className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                        title="Compartir por WhatsApp"
+                        onClick={() => handleOpenWhatsApp(p)}
                       >
-                        <Camera className="size-3.5" />
+                        <MessageSquare className="size-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-gray-600 hover:text-emerald-600"
-                        title="Editar producto"
-                        onClick={() => handleOpenEdit(p)}
-                      >
-                        <Edit2 className="size-3.5 text-emerald-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                        title="Eliminar producto"
-                        onClick={() => handleOpenDelete(p)}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
+                      {canGestionar && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                            title="Cambiar foto del producto"
+                            onClick={() => handleOpenImageEdit(p)}
+                          >
+                            <Camera className="size-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-gray-600 hover:text-emerald-600"
+                            title="Editar producto"
+                            onClick={() => handleOpenEdit(p)}
+                          >
+                            <Edit2 className="size-3.5 text-emerald-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                            title="Eliminar producto"
+                            onClick={() => handleOpenDelete(p)}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1310,6 +1364,12 @@ export default function ProductosCatalogPage() {
           </div>
         </div>
       )}
+      {/* Modal para Compartir Producto por WhatsApp */}
+      <ProductWhatsAppModal
+        open={whatsAppModalOpen}
+        onOpenChange={setWhatsAppModalOpen}
+        product={selectedProductForWhatsApp}
+      />
     </div>
   );
 }
