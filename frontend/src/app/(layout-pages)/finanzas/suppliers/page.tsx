@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,8 @@ export default function SuppliersPage() {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
+  const [supplierPage, setSupplierPage] = useState(1);
+  const [supplierPageSize, setSupplierPageSize] = useState(25);
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
   // Save Modal (Create / Edit)
@@ -222,6 +225,11 @@ export default function SuppliersPage() {
       return matchSearch && matchStatus;
     });
   }, [suppliers, searchTerm, filterStatus]);
+
+  const paginatedSuppliers = useMemo(() => {
+    const start = (supplierPage - 1) * supplierPageSize;
+    return filteredSuppliers.slice(start, start + supplierPageSize);
+  }, [filteredSuppliers, supplierPage, supplierPageSize]);
 
   // KPIs
   const kpis = useMemo(() => {
@@ -396,7 +404,7 @@ export default function SuppliersPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredSuppliers.map((sup) => {
+                  paginatedSuppliers.map((sup) => {
                     const cleanPhone = sup.telefono ? sup.telefono.replace(/\D/g, "") : "";
                     const hasTransactions = (sup.total_compras || 0) > 0 || (sup.total_gastos || 0) > 0;
 

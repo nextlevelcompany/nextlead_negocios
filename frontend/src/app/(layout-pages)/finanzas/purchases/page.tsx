@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,8 @@ export default function PurchasesPage() {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
+  const [purchasePage, setPurchasePage] = useState(1);
+  const [purchasePageSize, setPurchasePageSize] = useState(25);
   const [filterProvider, setFilterProvider] = useState<string>("all");
   const [filterEstado, setFilterEstado] = useState<string>("all");
 
@@ -155,6 +158,11 @@ export default function PurchasesPage() {
       return matchSearch && matchProv && matchEstado;
     });
   }, [purchases, searchTerm, filterProvider, filterEstado]);
+
+  const paginatedPurchases = useMemo(() => {
+    const start = (purchasePage - 1) * purchasePageSize;
+    return filteredPurchases.slice(start, start + purchasePageSize);
+  }, [filteredPurchases, purchasePage, purchasePageSize]);
 
   // Open Details Modal
   const handleViewDetails = async (purchase: CompraItem) => {
@@ -523,7 +531,7 @@ export default function PurchasesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredPurchases.map((p) => {
+                paginatedPurchases.map((p) => {
                   const isRecibida = p.estado === "recibida";
 
                   return (

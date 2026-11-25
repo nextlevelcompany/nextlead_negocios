@@ -5,6 +5,7 @@ import Link from "next/link";
 import api from "@/lib/api";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import {
   Card,
   CardContent,
@@ -236,6 +237,8 @@ export default function SalesViewPage() {
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState("");
+  const [salesPage, setSalesPage] = useState(1);
+  const [salesPageSize, setSalesPageSize] = useState(25);
   const [filterDesde, setFilterDesde] = useState("");
   const [filterHasta, setFilterHasta] = useState("");
   const [filterPago, setFilterPago] = useState<string>("all");
@@ -963,6 +966,11 @@ export default function SalesViewPage() {
       return matchSearch && matchDesde && matchHasta && matchPago && matchEstado && matchMetodo && matchComp;
     });
   }, [sales, searchTerm, filterDesde, filterHasta, filterPago, filterEstado, filterMetodo, filterComprobante, filterVendedor, filterSupervisor, filterEquipo]);
+
+  const paginatedSales = useMemo(() => {
+    const start = (salesPage - 1) * salesPageSize;
+    return filteredSales.slice(start, start + salesPageSize);
+  }, [filteredSales, salesPage, salesPageSize]);
 
   // Helper: Extraer monto NETO sin IGV de una venta (Base Imponible para telecomunicaciones)
   const getNetoVenta = (s: Sale): number => {
@@ -1754,6 +1762,15 @@ export default function SalesViewPage() {
                   </select>
                 </div>
               </CardContent>
+              <DataTablePagination
+                currentPage={salesPage}
+                pageSize={salesPageSize}
+                totalItems={filteredSales.length}
+                onPageChange={setSalesPage}
+                onPageSizeChange={setSalesPageSize}
+                pageSizeOptions={[10, 25, 50, 100]}
+                itemName="ventas"
+              />
             </Card>
           </div>
         )}
@@ -2668,7 +2685,7 @@ export default function SalesViewPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredSales.map((sale) => {
+                      paginatedSales.map((sale) => {
                         const isPaid = (sale.estado_pago || "").toLowerCase() === "pagado";
                         const isCompleted =
                           (sale.estado || "").toLowerCase() === "completada" ||

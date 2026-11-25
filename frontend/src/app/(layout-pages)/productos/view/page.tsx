@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+  const [productPage, setProductPage] = useState(1);
+  const [productPageSize, setProductPageSize] = useState(25);
 import {
   Boxes,
   Plus,
@@ -24,6 +26,7 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -285,6 +288,11 @@ export default function ProductosCatalogPage() {
       return true;
     });
   }, [productos, selectedCategoria, searchTerm]);
+
+  const paginatedProducts = useMemo(() => {
+    const start = (productPage - 1) * productPageSize;
+    return filteredProducts.slice(start, start + productPageSize);
+  }, [filteredProducts, productPage, productPageSize]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -644,7 +652,7 @@ export default function ProductosCatalogPage() {
       ) : viewMode === "grid" ? (
         /* VISTA CUADRÍCULA (GRID CONFIGURABLE: 4, 6 o 8 POR FILA) */
         <div className={`grid ${gridColsClass} items-stretch w-full`}>
-          {filteredProducts.map((p) => (
+          {paginatedProducts.map((p) => (
             <Card
               key={p.id}
               className={`h-full flex flex-col justify-between overflow-hidden bg-white dark:bg-card rounded-xl border border-gray-100 dark:border-border shadow-2xs hover:shadow-md transition-all duration-200 ${
@@ -795,7 +803,7 @@ export default function ProductosCatalogPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProducts.map((p) => (
+              {paginatedProducts.map((p) => (
                 <TableRow key={p.id} className="hover:bg-muted/20 transition-colors">
                   {/* Foto con clic para editar */}
                   <TableCell className="w-12 text-center py-2">
@@ -903,6 +911,15 @@ export default function ProductosCatalogPage() {
               ))}
             </TableBody>
           </Table>
+          <DataTablePagination
+            currentPage={productPage}
+            pageSize={productPageSize}
+            totalItems={filteredProducts.length}
+            onPageChange={setProductPage}
+            onPageSizeChange={setProductPageSize}
+            pageSizeOptions={[10, 25, 50, 100]}
+            itemName="productos"
+          />
         </div>
       )}
 

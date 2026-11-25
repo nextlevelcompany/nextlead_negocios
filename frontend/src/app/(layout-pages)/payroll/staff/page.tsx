@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +63,8 @@ export default function StaffPage() {
   const [perfiles, setPerfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [staffPage, setStaffPage] = useState(1);
+  const [staffPageSize, setStaffPageSize] = useState(25);
   const [filterRole, setFilterRole] = useState("all");
   const [filterComision, setFilterComision] = useState("all");
 
@@ -188,6 +191,11 @@ export default function StaffPage() {
       return matchSearch && matchRole && matchCom;
     });
   }, [workers, searchTerm, filterRole, filterComision]);
+
+  const paginatedWorkers = useMemo(() => {
+    const start = (staffPage - 1) * staffPageSize;
+    return filteredWorkers.slice(start, start + staffPageSize);
+  }, [filteredWorkers, staffPage, staffPageSize]);
 
   // KPIs
   const totalActivos = workers.filter((w) => w.estado === "Activo").length;
@@ -352,7 +360,7 @@ export default function StaffPage() {
                 </TableRow>
               </TableHeader>
               <TableBody className="text-xs">
-                {filteredWorkers.map((w) => (
+                {paginatedWorkers.map((w) => (
                   <TableRow key={w.id} className="hover:bg-muted/20">
                     <TableCell className="font-semibold">
                       <div className="flex flex-col">
@@ -443,6 +451,15 @@ export default function StaffPage() {
               </TableBody>
             </Table>
           </div>
+          <DataTablePagination
+            currentPage={staffPage}
+            pageSize={staffPageSize}
+            totalItems={filteredWorkers.length}
+            onPageChange={setStaffPage}
+            onPageSizeChange={setStaffPageSize}
+            pageSizeOptions={[10, 25, 50, 100]}
+            itemName="colaboradores"
+          />
         </CardContent>
       </Card>
 

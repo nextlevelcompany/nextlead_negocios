@@ -5,6 +5,7 @@ import Link from "next/link";
 import api from "@/lib/api";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,8 @@ export default function PedidosViewPage() {
     }
   }, []);
   const [searchTerm, setSearchTerm] = useState("");
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersPageSize, setOrdersPageSize] = useState(25);
   const [filterZona, setFilterZona] = useState<string>("all");
   const [filterChofer, setFilterChofer] = useState<string>("all");
   const [filterPago, setFilterPago] = useState<string>("all");
@@ -233,6 +236,11 @@ export default function PedidosViewPage() {
       return matchTerm && matchZona && matchChofer && matchPago && matchEtapa && matchPrioridad && matchDate;
     });
   }, [data.pedidos, searchTerm, filterZona, filterChofer, filterPago, filterEtapa, filterPrioridad, filterDate]);
+
+  const paginatedPedidos = useMemo(() => {
+    const start = (ordersPage - 1) * ordersPageSize;
+    return filteredPedidos.slice(start, start + ordersPageSize);
+  }, [filteredPedidos, ordersPage, ordersPageSize]);
 
   const handleResetFilters = () => {
     setSearchTerm("");
@@ -1013,7 +1021,7 @@ export default function PedidosViewPage() {
                 No se encontraron pedidos con los filtros seleccionados.
               </div>
             ) : (
-              filteredPedidos.map((pedido) => {
+              paginatedPedidos.map((pedido) => {
                 const etapa = data.columns.find((c) => c.id === pedido.etapa_id);
                 const cliente =
                   (pedido.contacto_nombre
@@ -1115,7 +1123,7 @@ export default function PedidosViewPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredPedidos.map((pedido) => {
+                  paginatedPedidos.map((pedido) => {
                     const etapa = data.columns.find((c) => c.id === pedido.etapa_id);
                     const cliente =
                       (pedido.contacto_nombre
@@ -1190,6 +1198,15 @@ export default function PedidosViewPage() {
             </Table>
             </div>
           </CardContent>
+          <DataTablePagination
+            currentPage={ordersPage}
+            pageSize={ordersPageSize}
+            totalItems={filteredPedidos.length}
+            onPageChange={setOrdersPage}
+            onPageSizeChange={setOrdersPageSize}
+            pageSizeOptions={[10, 25, 50, 100]}
+            itemName="pedidos"
+          />
         </Card>
       )}
         </div>

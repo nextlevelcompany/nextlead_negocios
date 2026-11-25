@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,8 @@ export default function ExpensesPage() {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
+  const [expensePage, setExpensePage] = useState(1);
+  const [expensePageSize, setExpensePageSize] = useState(25);
   const [filterCategoria, setFilterCategoria] = useState<string>("all");
   const [filterEstado, setFilterEstado] = useState<string>("all");
   const [filterPeriodo, setFilterPeriodo] = useState<"mes" | "todo">("mes");
@@ -178,6 +181,11 @@ export default function ExpensesPage() {
       return matchSearch && matchCat && matchEstado && matchDate;
     });
   }, [gastos, searchTerm, filterCategoria, filterEstado, filterPeriodo]);
+
+  const paginatedGastos = useMemo(() => {
+    const start = (expensePage - 1) * expensePageSize;
+    return filteredGastos.slice(start, start + expensePageSize);
+  }, [filteredGastos, expensePage, expensePageSize]);
 
   // Open Modal for New Gasto
   const handleOpenNew = () => {
@@ -488,7 +496,7 @@ export default function ExpensesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredGastos.map((g) => {
+                paginatedGastos.map((g) => {
                   const neto = Number(g.monto_total || 0) / 1.18;
                   const isPagado = g.estado_pago.toLowerCase() === "pagado";
 

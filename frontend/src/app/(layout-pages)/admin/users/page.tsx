@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,6 +145,8 @@ export default function UsersManagementPage() {
   const [staffList, setStaffList] = useState<WorkerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersPageSize, setUsersPageSize] = useState(25);
   const [filterRole, setFilterRole] = useState("all");
   const [activeTab, setActiveTab] = useState<"users" | "policies">("users");
 
@@ -433,6 +436,11 @@ export default function UsersManagementPage() {
     });
   }, [users, filterRole, searchTerm]);
 
+  const paginatedUsers = useMemo(() => {
+    const start = (usersPage - 1) * usersPageSize;
+    return filteredUsers.slice(start, start + usersPageSize);
+  }, [filteredUsers, usersPage, usersPageSize]);
+
   // Contadores
   const stats = useMemo(() => {
     const total = users.length;
@@ -618,7 +626,7 @@ export default function UsersManagementPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredUsers.map((u) => {
+                      paginatedUsers.map((u) => {
                         const perms = parsePermissions(u.modules, u.role);
                         const fullName = `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.username;
                         const isCurrentActive = activeUserUsername === u.username;
@@ -758,6 +766,15 @@ export default function UsersManagementPage() {
                   </TableBody>
                 </Table>
               </div>
+              <DataTablePagination
+                currentPage={usersPage}
+                pageSize={usersPageSize}
+                totalItems={filteredUsers.length}
+                onPageChange={setUsersPage}
+                onPageSizeChange={setUsersPageSize}
+                pageSizeOptions={[10, 25, 50, 100]}
+                itemName="usuarios"
+              />
             </CardContent>
           </Card>
         </TabsContent>

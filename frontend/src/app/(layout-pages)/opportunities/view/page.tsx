@@ -81,6 +81,7 @@ import {
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { OpportunityWhatsAppModal } from "@/components/opportunities/OpportunityWhatsAppModal";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import {
   OpportunityWhatsAppParams,
   buildOpportunityWhatsAppMessage,
@@ -157,6 +158,10 @@ export default function OpportunitiesKanbanPage() {
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [draggedOppId, setDraggedOppId] = useState<number | null>(null);
   const [dragOverColId, setDragOverColId] = useState<number | null>(null);
+
+  // Pagination for List View
+  const [listPage, setListPage] = useState(1);
+  const [listPageSize, setListPageSize] = useState(25);
 
   // WhatsApp Share State
   const [selectedOppForWhatsApp, setSelectedOppForWhatsApp] = useState<Opportunity | null>(null);
@@ -475,6 +480,11 @@ export default function OpportunitiesKanbanPage() {
       return matchSearch && matchPriority && matchTag && matchDate && matchSupervisor && matchPerfil && matchVendedor;
     });
   }, [opportunities, searchTerm, filterPriority, filterTag, filterDate, filterSupervisor, filterPerfil, filterVendedor]);
+
+  const paginatedOpps = useMemo(() => {
+    const start = (listPage - 1) * listPageSize;
+    return filteredOpps.slice(start, start + listPageSize);
+  }, [filteredOpps, listPage, listPageSize]);
 
   // Statistics (Calculados Sin IGV según precios base)
   const stats = useMemo(() => {
@@ -1711,7 +1721,7 @@ export default function OpportunitiesKanbanPage() {
                 No se encontraron oportunidades con los filtros seleccionados.
               </div>
             ) : (
-              filteredOpps.map((opp) => {
+              paginatedOpps.map((opp) => {
                 const etapa = columns.find((c) => c.id === opp.etapa_id);
                 return (
                   <div key={opp.id} className="p-3.5 space-y-2">
@@ -1826,7 +1836,7 @@ export default function OpportunitiesKanbanPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredOpps.map((opp) => {
+                  paginatedOpps.map((opp) => {
                     const col = columns.find((c) => c.id === opp.etapa_id);
                     return (
                       <TableRow key={opp.id} className="text-xs">
@@ -1971,6 +1981,15 @@ export default function OpportunitiesKanbanPage() {
             </Table>
             </div>
           </CardContent>
+          <DataTablePagination
+            currentPage={listPage}
+            pageSize={listPageSize}
+            totalItems={filteredOpps.length}
+            onPageChange={setListPage}
+            onPageSizeChange={setListPageSize}
+            pageSizeOptions={[10, 25, 50, 100]}
+            itemName="oportunidades"
+          />
         </Card>
       )}
         </div>
