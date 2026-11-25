@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-  const [productPage, setProductPage] = useState(1);
-  const [productPageSize, setProductPageSize] = useState(25);
 import {
   Boxes,
   Plus,
@@ -90,6 +88,8 @@ export default function ProductosCatalogPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoria, setSelectedCategoria] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [productPage, setProductPage] = useState(1);
+  const [productPageSize, setProductPageSize] = useState(25);
 
   // Grid Columns Selector (4, 6, 8 por fila - default 6)
   const [gridColumns, setGridColumns] = useState<4 | 6 | 8>(6);
