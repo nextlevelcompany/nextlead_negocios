@@ -20,11 +20,51 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class OpportunityController {
 
     private final JdbcTemplate jdbcTemplate;
+    private final com.nextlead.dao.UserDao userDao;
     private final SecureRandom random = new SecureRandom();
 
     @Autowired
-    public OpportunityController(JdbcTemplate jdbcTemplate) {
+    public OpportunityController(JdbcTemplate jdbcTemplate, com.nextlead.dao.UserDao userDao) {
         this.jdbcTemplate = jdbcTemplate;
+        this.userDao = userDao;
+    }
+
+    private Object[] resolveUserScope() {
+        Integer usuarioId = null;
+        Long trabajadorId = null;
+        String scope = "all";
+        try {
+            org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
+                java.util.Optional<com.nextlead.models.User> uOpt = userDao.findByUsername(auth.getName());
+                if (uOpt.isPresent()) {
+                    com.nextlead.models.User u = uOpt.get();
+                    String role = u.getRole() != null ? u.getRole().toUpperCase() : "ADMIN";
+                    if (!"ADMIN".equals(role)) {
+                        usuarioId = u.getId() != null ? u.getId().intValue() : null;
+                        try {
+                            String s = jdbcTemplate.queryForObject(
+                                "SELECT sales_scope FROM roles_sistema WHERE UPPER(codigo) = ?", String.class, role);
+                            if (s != null) scope = s.toLowerCase();
+                            else scope = "VENDEDOR".equals(role) ? "own" : ("SUPERVISOR".equals(role) ? "team" : "all");
+                        } catch (Exception e) {
+                            scope = "VENDEDOR".equals(role) ? "own" : ("SUPERVISOR".equals(role) ? "team" : "all");
+                        }
+                        try {
+                            Long tid = jdbcTemplate.queryForObject(
+                                "SELECT id FROM trabajadores WHERE usuario_id = ? LIMIT 1", Long.class, u.getId());
+                            if (tid != null) trabajadorId = tid;
+                        } catch (Exception ignored) {}
+                        if (trabajadorId == null && u.getModules() != null && u.getModules().contains("\"trabajador_id\":")) {
+                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"trabajador_id\"\\s*:\\s*(\\d+)").matcher(u.getModules());
+                            if (m.find()) trabajadorId = Long.parseLong(m.group(1));
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return new Object[]{ usuarioId, trabajadorId, scope };
     }
 
     private String getSetting(String key, String defaultVal) {
@@ -48,13 +88,37 @@ public class OpportunityController {
                 jdbcTemplate.execute("ALTER TABLE oportunidades ADD COLUMN IF NOT EXISTS supervisor_id INT REFERENCES trabajadores(id) ON DELETE SET NULL");
             } catch (Exception ignored) {}
 
+            // Resolve user scope for data privacy
+            Object[] scopeInfo = resolveUserScope();
+            Integer authUsuarioId = (Integer) scopeInfo[0];
+            Long authTrabajadorId = (Long) scopeInfo[1];
+            String scope = (String) scopeInfo[2];
+
+            String oppWhere = "";
+            List<Object> oppParams = new ArrayList<>();
+            if ("own".equals(scope)) {
+                if (authTrabajadorId != null) {
+                    oppWhere = "WHERE (o.trabajador_id = ? OR (o.trabajador_id IS NULL AND o.usuario_id = ?)) ";
+                    oppParams.add(authTrabajadorId.intValue());
+                    oppParams.add(authUsuarioId != null ? authUsuarioId : -1);
+                } else if (authUsuarioId != null) {
+                    oppWhere = "WHERE (o.usuario_id = ?) ";
+                    oppParams.add(authUsuarioId);
+                }
+            } else if ("team".equals(scope) && authTrabajadorId != null) {
+                oppWhere = "WHERE (o.supervisor_id = ? OR o.trabajador_id = ? OR t.supervisor_id = ?) ";
+                oppParams.add(authTrabajadorId.intValue());
+                oppParams.add(authTrabajadorId.intValue());
+                oppParams.add(authTrabajadorId.intValue());
+            }
+
             // Columns (Stages)
             List<Map<String, Object>> columns = jdbcTemplate.queryForList(
                 "SELECT * FROM kanban_columnas ORDER BY orden ASC"
             );
 
             // Opportunities with Commercial Staff & Supervisor info
-            List<Map<String, Object>> opps = jdbcTemplate.queryForList(
+            String oppSql =
                 "SELECT o.*, " +
                 "       COALESCE(NULLIF(o.contacto_persona, ''), " +
                 "                (SELECT CONCAT(sc.nombres, ' ', sc.apellidos) FROM contacts sc WHERE sc.empresa_id = c.id AND sc.nombres IS NOT NULL LIMIT 1), " +
@@ -77,35 +141,62 @@ public class OpportunityController {
                 "                         OR (o.trabajador_id IS NULL AND o.usuario_id IS NULL AND o.firma_nombre IS NOT NULL AND (t.nombre ILIKE o.firma_nombre OR CONCAT(t.nombre, ' ', t.apellido) ILIKE o.firma_nombre)) " +
                 "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
                 "LEFT JOIN trabajadores sup ON COALESCE(o.supervisor_id, t.supervisor_id) = sup.id " +
-                "ORDER BY o.orden ASC, o.id DESC"
-            );
+                oppWhere +
+                "ORDER BY o.orden ASC, o.id DESC";
+
+            List<Map<String, Object>> opps = oppParams.isEmpty()
+                ? jdbcTemplate.queryForList(oppSql)
+                : jdbcTemplate.queryForList(oppSql, oppParams.toArray());
 
             // Master Tags
             List<Map<String, Object>> tags = jdbcTemplate.queryForList(
                 "SELECT * FROM kanban_etiquetas ORDER BY nombre ASC"
             );
 
-            // All Contacts for dropdown with full searchable details
-            List<Map<String, Object>> contacts = jdbcTemplate.queryForList(
+            // Contacts for dropdown: If scope is own, only assigned contacts
+            String contactsSql =
                 "SELECT c.id, c.tipo_persona, c.numero_documento, c.telefono_principal, c.email, " +
                 "       c.razon_social, c.nombres, c.apellidos, c.empresa_id, " +
                 "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as display_name, " +
                 "       e.razon_social as empresa_padre_nombre " +
                 "FROM contacts c " +
-                "LEFT JOIN contacts e ON c.empresa_id = e.id " +
-                "ORDER BY display_name ASC"
-            );
+                "LEFT JOIN contacts e ON c.empresa_id = e.id ";
+
+            List<Object> contactsParams = new ArrayList<>();
+            if ("own".equals(scope)) {
+                contactsSql += "WHERE (c.asignado_a_id = ? OR c.trabajador_id = ?) ";
+                contactsParams.add(authTrabajadorId != null ? authTrabajadorId.intValue() : (authUsuarioId != null ? authUsuarioId : -1));
+                contactsParams.add(authTrabajadorId != null ? authTrabajadorId.intValue() : -1);
+            }
+            contactsSql += "ORDER BY display_name ASC";
+
+            List<Map<String, Object>> contacts = contactsParams.isEmpty()
+                ? jdbcTemplate.queryForList(contactsSql)
+                : jdbcTemplate.queryForList(contactsSql, contactsParams.toArray());
 
             // Active Staff for Commercial Filters & Assignment
-            List<Map<String, Object>> staff = jdbcTemplate.queryForList(
+            String staffSql =
                 "SELECT t.id, t.nombre, t.apellido, t.rol_operativo, t.perfil_comision_id, rp.nombre as perfil_nombre, " +
                 "       t.supervisor_id, TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre, t.equipo " +
                 "FROM trabajadores t " +
                 "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
                 "LEFT JOIN trabajadores sup ON t.supervisor_id = sup.id " +
-                "WHERE t.estado IS NULL OR t.estado = 'Activo' " +
-                "ORDER BY t.nombre ASC"
-            );
+                "WHERE (t.estado IS NULL OR t.estado = 'Activo') ";
+
+            List<Object> staffParams = new ArrayList<>();
+            if ("own".equals(scope) && authTrabajadorId != null) {
+                staffSql += "AND t.id = ? ";
+                staffParams.add(authTrabajadorId.intValue());
+            } else if ("team".equals(scope) && authTrabajadorId != null) {
+                staffSql += "AND (t.id = ? OR t.supervisor_id = ?) ";
+                staffParams.add(authTrabajadorId.intValue());
+                staffParams.add(authTrabajadorId.intValue());
+            }
+            staffSql += "ORDER BY t.nombre ASC";
+
+            List<Map<String, Object>> staff = staffParams.isEmpty()
+                ? jdbcTemplate.queryForList(staffSql)
+                : jdbcTemplate.queryForList(staffSql, staffParams.toArray());
 
             Map<String, Object> resp = new HashMap<>();
             resp.put("columns", columns);
@@ -153,8 +244,20 @@ public class OpportunityController {
                 return ResponseEntity.badRequest().body(Map.of("message", "La etapa o columna es obligatoria."));
             }
 
+            Object[] saveScopeInfo = resolveUserScope();
+            Integer authSaveUsuarioId = (Integer) saveScopeInfo[0];
+            Long authSaveTrabajadorId = (Long) saveScopeInfo[1];
+            String saveScope = (String) saveScopeInfo[2];
+
             Integer finalTrabajadorId = req.trabajador_id;
             Integer finalSupervisorId = req.supervisor_id;
+
+            if ("own".equals(saveScope)) {
+                if (authSaveTrabajadorId != null) {
+                    finalTrabajadorId = authSaveTrabajadorId.intValue();
+                }
+            }
+
             if (finalTrabajadorId != null && finalSupervisorId == null) {
                 try {
                     finalSupervisorId = jdbcTemplate.queryForObject(
@@ -183,11 +286,13 @@ public class OpportunityController {
                 );
                 oppId = req.id;
             } else {
-                // Fetch default user id to assign
-                Integer defaultUserId = 1;
-                try {
-                    defaultUserId = jdbcTemplate.queryForObject("SELECT id FROM users LIMIT 1", Integer.class);
-                } catch (Exception ignored) {}
+                // Fetch user id to assign
+                Integer defaultUserId = authSaveUsuarioId != null ? authSaveUsuarioId : 1;
+                if (authSaveUsuarioId == null) {
+                    try {
+                        defaultUserId = jdbcTemplate.queryForObject("SELECT id FROM users LIMIT 1", Integer.class);
+                    } catch (Exception ignored) {}
+                }
 
                 // Get max order
                 Integer maxOrder = jdbcTemplate.queryForObject(

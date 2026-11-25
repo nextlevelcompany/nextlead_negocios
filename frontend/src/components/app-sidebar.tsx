@@ -398,10 +398,12 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     const isAdmin = role === "ADMIN"
     const isSupervisor = role === "SUPERVISOR"
     const isVendedor = role === "VENDEDOR"
+    const isFinanzas = role === "FINANZAS"
+    const isOperaciones = role === "OPERACIONES"
 
     return data.navGroups
       .map((group) => {
-        // 1. Grupo SISTEMA: Solo visible para administradores
+        // 1. Grupo SISTEMA: Solo visible para administradores o permisos expresos de gestión
         if (group.label === "SISTEMA") {
           if (!isAdmin && !permissions.can_manage_users) {
             return null
@@ -410,7 +412,7 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
 
         // 2. Grupo GESTIÓN: Finanzas, Rentabilidad, Personal
         if (group.label === "GESTIÓN") {
-          if (isVendedor && !permissions.can_view_finance && !permissions.can_view_profitability) {
+          if ((isVendedor || isOperaciones) && !permissions.can_view_finance && !permissions.can_view_profitability) {
             return null
           }
           return {
@@ -418,13 +420,13 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
             items: group.items
               .filter((item) => {
                 if (item.title === "Finanzas") {
-                  return isAdmin || isSupervisor || permissions.can_view_finance
+                  return isAdmin || isSupervisor || isFinanzas || permissions.can_view_finance
                 }
                 if (item.title === "Rentabilidad y Comisiones") {
-                  return isAdmin || isSupervisor || permissions.can_view_profitability
+                  return isAdmin || isSupervisor || isFinanzas || permissions.can_view_profitability
                 }
                 if (item.title === "Personal") {
-                  return isAdmin || isSupervisor
+                  return isAdmin || isSupervisor || isFinanzas
                 }
                 return true
               })
@@ -445,16 +447,89 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
           }
         }
 
-        // 3. Grupo COMERCIAL: Ocultar "Asignación de Cartera" a Vendedores
+        // 3. Grupo COMERCIAL: WhatsApp, Contactos, Oportunidades, Ventas
         if (group.label === "COMERCIAL") {
           return {
             ...group,
+            items: group.items
+              .filter((item) => {
+                // Finanzas no requiere WhatsApp ni Oportunidades comerciales
+                if (isFinanzas && (item.title === "WhatsApp" || item.title === "Oportunidades")) {
+                  return false
+                }
+                // Operaciones no requiere Oportunidades
+                if (isOperaciones && item.title === "Oportunidades") {
+                  return false
+                }
+                return true
+              })
+              .map((item) => {
+                if (item.title === "Contactos") {
+                  return {
+                    ...item,
+                    items: item.items.filter((sub) => {
+                      // Solo Admin y Supervisor pueden reasignar cartera global
+                      if (sub.title === "Asignación de Cartera" && !isAdmin && !isSupervisor) {
+                        return false
+                      }
+                      return true
+                    }),
+                  }
+                }
+                if (item.title === "Oportunidades") {
+                  return {
+                    ...item,
+                    items: item.items.filter((sub) => {
+                      // Configuración de embudos solo para administradores
+                      if (sub.title === "Configuración" && !isAdmin) {
+                        return false
+                      }
+                      // Reportes globales no visibles para vendedores simples
+                      if (sub.title === "Reportes" && isVendedor) {
+                        return false
+                      }
+                      return true
+                    }),
+                  }
+                }
+                if (item.title === "Ventas") {
+                  return {
+                    ...item,
+                    items: item.items.filter((sub) => {
+                      if (sub.title === "Reportes" && isVendedor) {
+                        return false
+                      }
+                      return true
+                    }),
+                  }
+                }
+                return item
+              }),
+          }
+        }
+
+        // 4. Grupo OPERACIONES: Pedidos, Productos
+        if (group.label === "OPERACIONES") {
+          return {
+            ...group,
             items: group.items.map((item) => {
-              if (item.title === "Contactos") {
+              if (item.title === "Pedidos") {
                 return {
                   ...item,
                   items: item.items.filter((sub) => {
-                    if (sub.title === "Asignación de Cartera" && !isAdmin && !isSupervisor) {
+                    if (sub.title === "Reportes" && isVendedor) {
+                      return false
+                    }
+                    return true
+                  }),
+                }
+              }
+              if (item.title === "Productos") {
+                return {
+                  ...item,
+                  items: item.items.filter((sub) => {
+                    // Gestión de Categorías solo para Administradores y Operaciones
+                    if (sub.title === "Categorías" && !isAdmin && !isOperaciones) {
                       return false
                     }
                     return true

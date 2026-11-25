@@ -249,6 +249,8 @@ export default function SalesViewPage() {
   const [filterSupervisor, setFilterSupervisor] = useState<string>("all");
   const [filterEquipo, setFilterEquipo] = useState<string>("all");
   const [staffList, setStaffList] = useState<any[]>([]);
+  const [isOwnScope, setIsOwnScope] = useState(false);
+  const [ownTrabajadorId, setOwnTrabajadorId] = useState<string | null>(null);
 
   // Drag and Drop hover state
   const [draggedSaleId, setDraggedSaleId] = useState<number | null>(null);
@@ -713,15 +715,20 @@ export default function SalesViewPage() {
         if (stored) {
           try {
             const u = JSON.parse(stored);
+            let m: any = {};
             if (u.modules) {
-              const m = typeof u.modules === "string" ? JSON.parse(u.modules) : u.modules;
-              if (m.sales_scope === "own" && m.trabajador_id) {
-                setFilterVendedor(String(m.trabajador_id));
-              } else if (u.role === "VENDEDOR" && m.trabajador_id) {
-                setFilterVendedor(String(m.trabajador_id));
-              } else if (m.sales_scope === "all" || u.role === "ADMIN") {
-                // Admin ve todas
+              m = typeof u.modules === "string" ? JSON.parse(u.modules) : u.modules;
+            }
+            if (m.sales_scope === "own" || u.role === "VENDEDOR") {
+              setIsOwnScope(true);
+              if (m.trabajador_id) {
+                const tid = String(m.trabajador_id);
+                setOwnTrabajadorId(tid);
+                setFilterVendedor(tid);
               }
+            } else {
+              setIsOwnScope(false);
+              setOwnTrabajadorId(null);
             }
           } catch {}
         }
@@ -899,7 +906,7 @@ export default function SalesViewPage() {
     setFilterEstado("all");
     setFilterMetodo("all");
     setFilterComprobante("all");
-    setFilterVendedor("all");
+    setFilterVendedor(isOwnScope && ownTrabajadorId ? ownTrabajadorId : "all");
     setFilterSupervisor("all");
     setFilterEquipo("all");
   };
@@ -1401,18 +1408,22 @@ export default function SalesViewPage() {
           {/* Quick Filter: Vendedor */}
           <div className="flex items-center gap-1 bg-muted/50 rounded-lg border px-2 py-1">
             <User className="size-3.5 text-indigo-600 shrink-0" />
-            <select
-              className="bg-transparent border-none text-xs font-medium focus:outline-none cursor-pointer text-foreground"
-              value={filterVendedor}
-              onChange={(e) => setFilterVendedor(e.target.value)}
-            >
-              <option value="all">Vendedor: Todos</option>
-              {allVendedores.map((ven) => (
-                <option key={ven.id} value={ven.id}>
-                  {ven.label} {ven.perfil ? `(${ven.perfil})` : ""}
-                </option>
-              ))}
-            </select>
+            {isOwnScope ? (
+              <span className="text-xs font-semibold text-emerald-600 px-1">Mis Ventas Asignadas</span>
+            ) : (
+              <select
+                className="bg-transparent border-none text-xs font-medium focus:outline-none cursor-pointer text-foreground"
+                value={filterVendedor}
+                onChange={(e) => setFilterVendedor(e.target.value)}
+              >
+                <option value="all">Vendedor: Todos</option>
+                {allVendedores.map((ven) => (
+                  <option key={ven.id} value={ven.id}>
+                    {ven.label} {ven.perfil ? `(${ven.perfil})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Quick Filter: Equipo */}
@@ -1434,7 +1445,7 @@ export default function SalesViewPage() {
         </div>
 
         {/* Status of filter & quick reset button */}
-        {(filterSupervisor !== "all" || filterVendedor !== "all" || filterEquipo !== "all") && (
+        {(filterSupervisor !== "all" || (!isOwnScope && filterVendedor !== "all") || filterEquipo !== "all") && (
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-muted-foreground">
               Mostrando <strong className="text-foreground">{filteredSales.length}</strong> de {sales.length} ventas
@@ -1444,7 +1455,7 @@ export default function SalesViewPage() {
               size="sm"
               onClick={() => {
                 setFilterSupervisor("all");
-                setFilterVendedor("all");
+                setFilterVendedor(isOwnScope && ownTrabajadorId ? ownTrabajadorId : "all");
                 setFilterEquipo("all");
               }}
               className="h-7 text-xs text-destructive hover:text-destructive px-2 gap-1 font-semibold cursor-pointer"

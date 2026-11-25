@@ -17,17 +17,62 @@ import java.util.*;
 public class PedidoController {
 
     private final JdbcTemplate jdbcTemplate;
+    private final com.nextlead.dao.UserDao userDao;
     private final SecureRandom random = new SecureRandom();
 
     @Autowired
-    public PedidoController(JdbcTemplate jdbcTemplate) {
+    public PedidoController(JdbcTemplate jdbcTemplate, com.nextlead.dao.UserDao userDao) {
         this.jdbcTemplate = jdbcTemplate;
+        this.userDao = userDao;
+    }
+
+    private Object[] resolveUserScope() {
+        Integer usuarioId = null;
+        Long trabajadorId = null;
+        String scope = "all";
+        try {
+            org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
+                java.util.Optional<com.nextlead.models.User> uOpt = userDao.findByUsername(auth.getName());
+                if (uOpt.isPresent()) {
+                    com.nextlead.models.User u = uOpt.get();
+                    String role = u.getRole() != null ? u.getRole().toUpperCase() : "ADMIN";
+                    if (!"ADMIN".equals(role)) {
+                        usuarioId = u.getId() != null ? u.getId().intValue() : null;
+                        try {
+                            String s = jdbcTemplate.queryForObject(
+                                "SELECT sales_scope FROM roles_sistema WHERE UPPER(codigo) = ?", String.class, role);
+                            if (s != null) scope = s.toLowerCase();
+                            else scope = "VENDEDOR".equals(role) ? "own" : ("SUPERVISOR".equals(role) ? "team" : "all");
+                        } catch (Exception e) {
+                            scope = "VENDEDOR".equals(role) ? "own" : ("SUPERVISOR".equals(role) ? "team" : "all");
+                        }
+                        try {
+                            Long tid = jdbcTemplate.queryForObject(
+                                "SELECT id FROM trabajadores WHERE usuario_id = ? LIMIT 1", Long.class, u.getId());
+                            if (tid != null) trabajadorId = tid;
+                        } catch (Exception ignored) {}
+                        if (trabajadorId == null && u.getModules() != null && u.getModules().contains("\"trabajador_id\":")) {
+                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"trabajador_id\"\\s*:\\s*(\\d+)").matcher(u.getModules());
+                            if (m.find()) trabajadorId = Long.parseLong(m.group(1));
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return new Object[]{ usuarioId, trabajadorId, scope };
     }
 
     // 1. GET /api/pedidos/logistics-data
     @GetMapping("/logistics-data")
     public ResponseEntity<?> getLogisticsData() {
         try {
+            Object[] scopeInfo = resolveUserScope();
+            Integer authUsuarioId = (Integer) scopeInfo[0];
+            Long authTrabajadorId = (Long) scopeInfo[1];
+            String scope = (String) scopeInfo[2];
+
             // Columns
             List<Map<String, Object>> columns = jdbcTemplate.queryForList(
                     "SELECT id, nombre, orden, es_entregado, label_ganado, es_perdido, label_perdido FROM etapas_pedido ORDER BY orden ASC"
@@ -53,8 +98,23 @@ public class PedidoController {
                     "SELECT id, nombre FROM categorias_producto WHERE activo = true ORDER BY nombre ASC"
             );
 
-            // Pedidos
-            List<Map<String, Object>> pedidos = jdbcTemplate.queryForList(
+            // Pedidos - apply scope filter
+            String whereClause = "";
+            List<Object> params = new ArrayList<>();
+            if ("own".equals(scope)) {
+                if (authTrabajadorId != null) {
+                    whereClause = "WHERE (p.contacto_id IN (SELECT id FROM contacts WHERE asignado_a_id = ? OR trabajador_id = ?) OR p.id IN (SELECT vp.pedido_id FROM venta_pedidos vp JOIN ventas v ON vp.venta_id = v.id WHERE v.trabajador_id = ?)) ";
+                    params.add(authTrabajadorId.intValue());
+                    params.add(authTrabajadorId.intValue());
+                    params.add(authTrabajadorId.intValue());
+                } else if (authUsuarioId != null) {
+                    whereClause = "WHERE (p.contacto_id IN (SELECT id FROM contacts WHERE asignado_a_id = ?) OR p.id IN (SELECT vp.pedido_id FROM venta_pedidos vp JOIN ventas v ON vp.venta_id = v.id WHERE v.usuario_id = ?)) ";
+                    params.add(authUsuarioId);
+                    params.add(authUsuarioId);
+                }
+            }
+
+            String pedidosSql = 
                     "SELECT p.*, " +
                     "       c.nombres AS contacto_nombre, " +
                     "       c.apellidos AS contacto_apellido, " +
@@ -74,8 +134,12 @@ public class PedidoController {
                     "LEFT JOIN contacts c ON p.contacto_id = c.id " +
                     "LEFT JOIN zonas z ON p.zona = z.id " +
                     "LEFT JOIN conductores cond ON p.chofer_id = cond.id " +
-                    "ORDER BY p.id DESC"
-            );
+                    whereClause +
+                    "ORDER BY p.id DESC";
+
+            List<Map<String, Object>> pedidos = params.isEmpty()
+                    ? jdbcTemplate.queryForList(pedidosSql)
+                    : jdbcTemplate.queryForList(pedidosSql, params.toArray());
 
             Map<String, Object> response = new HashMap<>();
             response.put("columns", columns);
@@ -94,12 +158,25 @@ public class PedidoController {
     // 2. GET /api/pedidos/search-contacts?q=...
     @GetMapping("/search-contacts")
     public ResponseEntity<?> searchContacts(@RequestParam(value = "q", defaultValue = "") String q) {
+        Object[] scopeInfo = resolveUserScope();
+        Integer authUsuarioId = (Integer) scopeInfo[0];
+        Long authTrabajadorId = (Long) scopeInfo[1];
+        String scope = (String) scopeInfo[2];
+
         String query = "%" + q + "%";
         String sql = "SELECT id, nombres, apellidos, numero_documento, tipo_persona, telefono_principal " +
                      "FROM contacts " +
-                     "WHERE (nombres ILIKE ? OR apellidos ILIKE ? OR numero_documento ILIKE ? OR telefono_principal ILIKE ?) " +
-                     "LIMIT 25";
-        List<Map<String, Object>> list = jdbcTemplate.queryForList(sql, query, query, query, query);
+                     "WHERE (nombres ILIKE ? OR apellidos ILIKE ? OR numero_documento ILIKE ? OR telefono_principal ILIKE ?) ";
+        List<Object> searchParams = new ArrayList<>(List.of(query, query, query, query));
+
+        if ("own".equals(scope)) {
+            sql += " AND (asignado_a_id = ? OR trabajador_id = ?)";
+            searchParams.add(authTrabajadorId != null ? authTrabajadorId.intValue() : (authUsuarioId != null ? authUsuarioId : -1));
+            searchParams.add(authTrabajadorId != null ? authTrabajadorId.intValue() : -1);
+        }
+
+        sql += " LIMIT 25";
+        List<Map<String, Object>> list = jdbcTemplate.queryForList(sql, searchParams.toArray());
         List<Map<String, Object>> formatted = new ArrayList<>();
         for (Map<String, Object> row : list) {
             String name = (row.get("nombres") != null ? row.get("nombres").toString() : "") + " " +

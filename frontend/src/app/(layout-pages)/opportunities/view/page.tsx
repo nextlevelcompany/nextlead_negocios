@@ -243,6 +243,42 @@ export default function OpportunitiesKanbanPage() {
   const [filterVendedor, setFilterVendedor] = useState<string>("all");
   const [staffList, setStaffList] = useState<any[]>([]);
 
+  // User scope tracking for privacy
+  const [isOwnScope, setIsOwnScope] = useState(false);
+  const [ownTrabajadorId, setOwnTrabajadorId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const applyUserScope = () => {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem("crm_active_user");
+        if (stored) {
+          try {
+            const u = JSON.parse(stored);
+            let m: any = {};
+            if (u.modules) {
+              m = typeof u.modules === "string" ? JSON.parse(u.modules) : u.modules;
+            }
+            if (m.sales_scope === "own" || u.role === "VENDEDOR") {
+              setIsOwnScope(true);
+              if (m.trabajador_id) {
+                const tid = String(m.trabajador_id);
+                setOwnTrabajadorId(tid);
+                setFilterVendedor(tid);
+              }
+            } else {
+              setIsOwnScope(false);
+              setOwnTrabajadorId(null);
+            }
+          } catch {}
+        }
+      }
+    };
+    applyUserScope();
+    const handleUserSwitch = () => applyUserScope();
+    window.addEventListener("crm_user_switched", handleUserSwitch);
+    return () => window.removeEventListener("crm_user_switched", handleUserSwitch);
+  }, []);
+
   // Modals state
   const [showColModal, setShowColModal] = useState(false);
   const [colForm, setColForm] = useState<{
@@ -1123,24 +1159,33 @@ export default function OpportunitiesKanbanPage() {
                   <UserCheck className="size-3 text-indigo-600" />
                   Ejecutivo / Asesor
                 </label>
-                <select
-                  className="w-full h-8 px-2 rounded-md border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
-                  value={filterVendedor}
-                  onChange={(e) => setFilterVendedor(e.target.value)}
-                >
-                  <option value="all">Todos los Asesores</option>
-                  {visibleVendedores.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.label} {v.perfil ? `(${v.perfil})` : ""}
-                    </option>
-                  ))}
-                </select>
+                {isOwnScope ? (
+                  <div className="w-full h-8 px-2.5 rounded-md border bg-muted/40 text-xs text-foreground flex items-center justify-between font-medium">
+                    <span className="truncate">Mis Asignadas</span>
+                    <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-200">
+                      Asesor
+                    </Badge>
+                  </div>
+                ) : (
+                  <select
+                    className="w-full h-8 px-2 rounded-md border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                    value={filterVendedor}
+                    onChange={(e) => setFilterVendedor(e.target.value)}
+                  >
+                    <option value="all">Todos los Asesores</option>
+                    {visibleVendedores.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.label} {v.perfil ? `(${v.perfil})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
 
             {/* Reset Filters & Results Count */}
             <div className="pt-2 border-t space-y-2">
-              {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null || filterSupervisor !== "all" || filterPerfil !== "all" || filterVendedor !== "all") && (
+              {(searchTerm || filterPriority !== "all" || filterTag !== "all" || filterDate !== null || filterSupervisor !== "all" || filterPerfil !== "all" || (filterVendedor !== "all" && !isOwnScope)) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -1152,7 +1197,7 @@ export default function OpportunitiesKanbanPage() {
                     setFilterDate(null);
                     setFilterSupervisor("all");
                     setFilterPerfil("all");
-                    setFilterVendedor("all");
+                    setFilterVendedor(isOwnScope && ownTrabajadorId ? ownTrabajadorId : "all");
                   }}
                 >
                   <RotateCcw className="size-3" />
@@ -1237,30 +1282,39 @@ export default function OpportunitiesKanbanPage() {
               {/* Selector Ejecutivo / Asesor */}
               <div className="flex items-center gap-1">
                 <UserCheck className="size-3.5 text-indigo-600 hidden md:inline shrink-0" />
-                <select
-                  className="h-8 px-2.5 rounded-lg border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary shadow-2xs max-w-[210px]"
-                  value={filterVendedor}
-                  onChange={(e) => setFilterVendedor(e.target.value)}
-                  title="Filtrar por Ejecutivo / Asesor comercial"
-                >
-                  <option value="all">Asesor: Todos</option>
-                  {visibleVendedores.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.label} {v.perfil ? `(${v.perfil})` : ""}
-                    </option>
-                  ))}
-                </select>
+                {isOwnScope ? (
+                  <div className="h-8 px-2.5 rounded-lg border bg-muted/40 text-xs text-foreground flex items-center gap-1.5 font-medium shadow-2xs">
+                    <span>Mis Oportunidades</span>
+                    <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-200">
+                      Asignadas
+                    </Badge>
+                  </div>
+                ) : (
+                  <select
+                    className="h-8 px-2.5 rounded-lg border bg-background text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary shadow-2xs max-w-[210px]"
+                    value={filterVendedor}
+                    onChange={(e) => setFilterVendedor(e.target.value)}
+                    title="Filtrar por Ejecutivo / Asesor comercial"
+                  >
+                    <option value="all">Asesor: Todos</option>
+                    {visibleVendedores.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.label} {v.perfil ? `(${v.perfil})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Reset Commercial Filters if any active */}
-              {(filterSupervisor !== "all" || filterPerfil !== "all" || filterVendedor !== "all") && (
+              {(filterSupervisor !== "all" || filterPerfil !== "all" || (filterVendedor !== "all" && !isOwnScope)) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     setFilterSupervisor("all");
                     setFilterPerfil("all");
-                    setFilterVendedor("all");
+                    setFilterVendedor(isOwnScope && ownTrabajadorId ? ownTrabajadorId : "all");
                   }}
                   className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1 px-2"
                   title="Restablecer filtros comerciales"

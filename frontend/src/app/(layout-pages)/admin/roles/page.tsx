@@ -48,10 +48,40 @@ import {
   X,
   Copy,
   Info,
+  MessageSquare,
+  Boxes,
+  Truck,
+  Target,
+  LayoutDashboard,
+  ShoppingCart,
+  CalendarCheck,
 } from "lucide-react";
 
 // Estructura completa de permisos por módulo
 export interface ModulePermissions {
+  dashboard: {
+    ver_analitica: boolean;
+    ver_metricas: boolean;
+  };
+  whatsapp: {
+    chat: boolean;
+    integraciones_ia: boolean;
+  };
+  clientes: {
+    ver_todos: boolean;
+    crear: boolean;
+    chatear_whatsapp: boolean;
+    exportar: boolean;
+    asignar_cartera: boolean;
+  };
+  oportunidades: {
+    ver: boolean;
+    crear: boolean;
+    editar: boolean;
+    eliminar: boolean;
+    exportar: boolean;
+    configurar: boolean;
+  };
   ventas: {
     ver: boolean;
     crear: boolean;
@@ -61,11 +91,26 @@ export interface ModulePermissions {
     reasignar: boolean;
     exportar: boolean;
   };
+  pedidos: {
+    ver: boolean;
+    crear: boolean;
+    editar: boolean;
+    anular: boolean;
+    despachar: boolean;
+  };
+  productos: {
+    ver_catalogo: boolean;
+    gestionar_productos: boolean;
+    gestionar_categorias: boolean;
+  };
   finanzas: {
     ver_flujo: boolean;
     registrar_movimiento: boolean;
     ver_cuentas_bancarias: boolean;
     anular_movimiento: boolean;
+    compras: boolean;
+    gastos: boolean;
+    deudas: boolean;
   };
   rentabilidad: {
     ver_margenes: boolean;
@@ -76,14 +121,9 @@ export interface ModulePermissions {
   payroll: {
     ver_personal: boolean;
     gestionar_personal: boolean;
+    asistencia: boolean;
     ver_liquidaciones: boolean;
     pagar_comisiones: boolean;
-  };
-  clientes: {
-    ver_todos: boolean;
-    crear: boolean;
-    chatear_whatsapp: boolean;
-    exportar: boolean;
   };
   admin: {
     gestionar_usuarios: boolean;
@@ -106,11 +146,16 @@ export interface RoleData {
 }
 
 const DEFAULT_EMPTY_PERMS: ModulePermissions = {
+  dashboard: { ver_analitica: true, ver_metricas: false },
+  whatsapp: { chat: true, integraciones_ia: false },
+  clientes: { ver_todos: false, crear: true, chatear_whatsapp: true, exportar: false, asignar_cartera: false },
+  oportunidades: { ver: true, crear: true, editar: true, eliminar: false, exportar: false, configurar: false },
   ventas: { ver: true, crear: true, editar: true, instalar: false, anular: false, reasignar: false, exportar: false },
-  finanzas: { ver_flujo: false, registrar_movimiento: false, ver_cuentas_bancarias: false, anular_movimiento: false },
+  pedidos: { ver: true, crear: true, editar: false, anular: false, despachar: false },
+  productos: { ver_catalogo: true, gestionar_productos: false, gestionar_categorias: false },
+  finanzas: { ver_flujo: false, registrar_movimiento: false, ver_cuentas_bancarias: false, anular_movimiento: false, compras: false, gastos: false, deudas: false },
   rentabilidad: { ver_margenes: false, ver_costos: false, simulador: false, configurar_perfiles: false },
-  payroll: { ver_personal: false, gestionar_personal: false, ver_liquidaciones: false, pagar_comisiones: false },
-  clientes: { ver_todos: false, crear: true, chatear_whatsapp: true, exportar: false },
+  payroll: { ver_personal: false, gestionar_personal: false, asistencia: false, ver_liquidaciones: false, pagar_comisiones: false },
   admin: { gestionar_usuarios: false, gestionar_roles: false, ajustes_sistema: false },
 };
 
@@ -145,13 +190,27 @@ export default function RolesManagementPage() {
       setLoading(true);
       const res = await api.get("/api/admin/roles");
       const list: RoleData[] = (Array.isArray(res.data) ? res.data : []).map((r: any) => {
-        let permsParsed = DEFAULT_EMPTY_PERMS;
+        let permsParsed: ModulePermissions = { ...DEFAULT_EMPTY_PERMS };
         try {
+          let incoming: any = {};
           if (typeof r.permisos === "string") {
-            permsParsed = JSON.parse(r.permisos);
+            incoming = JSON.parse(r.permisos);
           } else if (r.permisos && typeof r.permisos === "object") {
-            permsParsed = r.permisos;
+            incoming = r.permisos;
           }
+          permsParsed = {
+            dashboard: { ...DEFAULT_EMPTY_PERMS.dashboard, ...(incoming.dashboard || {}) },
+            whatsapp: { ...DEFAULT_EMPTY_PERMS.whatsapp, ...(incoming.whatsapp || {}) },
+            clientes: { ...DEFAULT_EMPTY_PERMS.clientes, ...(incoming.clientes || {}) },
+            oportunidades: { ...DEFAULT_EMPTY_PERMS.oportunidades, ...(incoming.oportunidades || {}) },
+            ventas: { ...DEFAULT_EMPTY_PERMS.ventas, ...(incoming.ventas || {}) },
+            pedidos: { ...DEFAULT_EMPTY_PERMS.pedidos, ...(incoming.pedidos || {}) },
+            productos: { ...DEFAULT_EMPTY_PERMS.productos, ...(incoming.productos || {}) },
+            finanzas: { ...DEFAULT_EMPTY_PERMS.finanzas, ...(incoming.finanzas || {}) },
+            rentabilidad: { ...DEFAULT_EMPTY_PERMS.rentabilidad, ...(incoming.rentabilidad || {}) },
+            payroll: { ...DEFAULT_EMPTY_PERMS.payroll, ...(incoming.payroll || {}) },
+            admin: { ...DEFAULT_EMPTY_PERMS.admin, ...(incoming.admin || {}) },
+          };
         } catch {
           // ignore
         }
@@ -694,15 +753,267 @@ export default function RolesManagementPage() {
                 <div className="space-y-4">
                   <h3 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2 border-b pb-2">
                     <Layers className="size-4 text-primary" />
-                    Permisos de Operación por Módulo
+                    Permisos de Operación por Módulo (Menú Lateral Completo)
                   </h3>
 
-                  {/* Módulo Ventas */}
+                  {/* 1. Módulo Dashboard */}
+                  <div className="p-4 rounded-xl border bg-card space-y-3">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <div className="flex items-center gap-2">
+                        <LayoutDashboard className="size-4 text-indigo-600" />
+                        <span className="font-bold text-sm">Dashboard & Métricas Principales</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("dashboard", true)}
+                          className="text-primary hover:underline text-[11px]"
+                        >
+                          Marcar todos
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("dashboard", false)}
+                          className="text-muted-foreground hover:underline text-[11px]"
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Ver Analítica</span>
+                          <p className="text-[10px] text-muted-foreground">Acceso al panel /dashboard/analytics</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.dashboard?.ver_analitica ?? true}
+                          onCheckedChange={() => togglePermission("dashboard", "ver_analitica")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Ver Métricas de Negocio</span>
+                          <p className="text-[10px] text-muted-foreground">Acceso a KPIs y /dashboard/eCommerce</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.dashboard?.ver_metricas ?? false}
+                          onCheckedChange={() => togglePermission("dashboard", "ver_metricas")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. Módulo WhatsApp */}
+                  <div className="p-4 rounded-xl border bg-card space-y-3">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="size-4 text-emerald-600" />
+                        <span className="font-bold text-sm">Módulo WhatsApp & Conversaciones</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("whatsapp", true)}
+                          className="text-primary hover:underline text-[11px]"
+                        >
+                          Marcar todos
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("whatsapp", false)}
+                          className="text-muted-foreground hover:underline text-[11px]"
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Chatbox WhatsApp</span>
+                          <p className="text-[10px] text-muted-foreground">Bandeja de chats y respuestas directas</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.whatsapp?.chat ?? true}
+                          onCheckedChange={() => togglePermission("whatsapp", "chat")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Integraciones & Respuestas IA</span>
+                          <p className="text-[10px] text-muted-foreground">Configuración de agentes y prompts IA</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.whatsapp?.integraciones_ia ?? false}
+                          onCheckedChange={() => togglePermission("whatsapp", "integraciones_ia")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Módulo Contactos & Clientes */}
+                  <div className="p-4 rounded-xl border bg-card space-y-3">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <div className="flex items-center gap-2">
+                        <Users className="size-4 text-cyan-600" />
+                        <span className="font-bold text-sm">Módulo Contactos & Clientes</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("clientes", true)}
+                          className="text-primary hover:underline text-[11px]"
+                        >
+                          Marcar todos
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("clientes", false)}
+                          className="text-muted-foreground hover:underline text-[11px]"
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Ver Todos los Contactos</span>
+                          <p className="text-[10px] text-muted-foreground">Si está inactivo, solo ve asignados</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.clientes?.ver_todos ?? false}
+                          onCheckedChange={() => togglePermission("clientes", "ver_todos")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Crear contactos</span>
+                        <Switch
+                          checked={activePerms.clientes?.crear ?? true}
+                          onCheckedChange={() => togglePermission("clientes", "crear")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Chatear por WhatsApp</span>
+                        <Switch
+                          checked={activePerms.clientes?.chatear_whatsapp ?? true}
+                          onCheckedChange={() => togglePermission("clientes", "chatear_whatsapp")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Exportar contactos</span>
+                        <Switch
+                          checked={activePerms.clientes?.exportar ?? false}
+                          onCheckedChange={() => togglePermission("clientes", "exportar")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Asignación de Cartera</span>
+                          <p className="text-[10px] text-muted-foreground">Reasignación masiva de clientes</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.clientes?.asignar_cartera ?? false}
+                          onCheckedChange={() => togglePermission("clientes", "asignar_cartera")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Módulo Oportunidades & Cotizaciones */}
+                  <div className="p-4 rounded-xl border bg-card space-y-3">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <div className="flex items-center gap-2">
+                        <Target className="size-4 text-amber-600" />
+                        <span className="font-bold text-sm">Módulo Oportunidades & Pipeline</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("oportunidades", true)}
+                          className="text-primary hover:underline text-[11px]"
+                        >
+                          Marcar todos
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("oportunidades", false)}
+                          className="text-muted-foreground hover:underline text-[11px]"
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Consultar Oportunidades</span>
+                          <p className="text-[10px] text-muted-foreground">Acceso a Kanban y vista lista</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.oportunidades?.ver ?? true}
+                          onCheckedChange={() => togglePermission("oportunidades", "ver")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Crear oportunidad</span>
+                        <Switch
+                          checked={activePerms.oportunidades?.crear ?? true}
+                          onCheckedChange={() => togglePermission("oportunidades", "crear")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Editar oportunidad</span>
+                        <Switch
+                          checked={activePerms.oportunidades?.editar ?? true}
+                          onCheckedChange={() => togglePermission("oportunidades", "editar")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold text-rose-600">Eliminar oportunidad</span>
+                          <p className="text-[10px] text-muted-foreground">Borrar fichas comerciales</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.oportunidades?.eliminar ?? false}
+                          onCheckedChange={() => togglePermission("oportunidades", "eliminar")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Exportar reportes</span>
+                        <Switch
+                          checked={activePerms.oportunidades?.exportar ?? false}
+                          onCheckedChange={() => togglePermission("oportunidades", "exportar")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Configurar Embudos</span>
+                          <p className="text-[10px] text-muted-foreground">Etapas, columnas y etiquetas</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.oportunidades?.configurar ?? false}
+                          onCheckedChange={() => togglePermission("oportunidades", "configurar")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 5. Módulo Ventas */}
                   <div className="p-4 rounded-xl border bg-card space-y-3">
                     <div className="flex items-center justify-between border-b pb-2">
                       <div className="flex items-center gap-2">
                         <TrendingUp className="size-4 text-emerald-600" />
-                        <span className="font-bold text-sm">Módulo de Ventas & CRM</span>
+                        <span className="font-bold text-sm">Módulo Ventas & Facturación</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <button
@@ -727,60 +1038,198 @@ export default function RolesManagementPage() {
                       <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
                         <span className="text-xs">Consultar ventas</span>
                         <Switch
-                          checked={activePerms.ventas.ver}
+                          checked={activePerms.ventas?.ver ?? true}
                           onCheckedChange={() => togglePermission("ventas", "ver")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
                         <span className="text-xs">Registrar ventas</span>
                         <Switch
-                          checked={activePerms.ventas.crear}
+                          checked={activePerms.ventas?.crear ?? true}
                           onCheckedChange={() => togglePermission("ventas", "crear")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
                         <span className="text-xs">Editar ventas</span>
                         <Switch
-                          checked={activePerms.ventas.editar}
+                          checked={activePerms.ventas?.editar ?? true}
                           onCheckedChange={() => togglePermission("ventas", "editar")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
                         <div>
                           <span className="text-xs font-semibold">Cerrar / Instalar</span>
-                          <p className="text-[10px] text-muted-foreground">Validar instalación</p>
+                          <p className="text-[10px] text-muted-foreground">Validar instalación y entrega</p>
                         </div>
                         <Switch
-                          checked={activePerms.ventas.instalar}
+                          checked={activePerms.ventas?.instalar ?? false}
                           onCheckedChange={() => togglePermission("ventas", "instalar")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
                         <div>
                           <span className="text-xs font-semibold text-rose-600">Anular ventas</span>
-                          <p className="text-[10px] text-muted-foreground">Marcar como anulada</p>
+                          <p className="text-[10px] text-muted-foreground">Marcar como cancelada</p>
                         </div>
                         <Switch
-                          checked={activePerms.ventas.anular}
+                          checked={activePerms.ventas?.anular ?? false}
                           onCheckedChange={() => togglePermission("ventas", "anular")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
                         <span className="text-xs">Reasignar asesor</span>
                         <Switch
-                          checked={activePerms.ventas.reasignar}
+                          checked={activePerms.ventas?.reasignar ?? false}
                           onCheckedChange={() => togglePermission("ventas", "reasignar")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Exportar ventas</span>
+                        <Switch
+                          checked={activePerms.ventas?.exportar ?? false}
+                          onCheckedChange={() => togglePermission("ventas", "exportar")}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Módulo Finanzas & Caja */}
+                  {/* 6. Módulo Pedidos & Despachos */}
+                  <div className="p-4 rounded-xl border bg-card space-y-3">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <div className="flex items-center gap-2">
+                        <Truck className="size-4 text-blue-600" />
+                        <span className="font-bold text-sm">Módulo Pedidos & Operaciones</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("pedidos", true)}
+                          className="text-primary hover:underline text-[11px]"
+                        >
+                          Marcar todos
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("pedidos", false)}
+                          className="text-muted-foreground hover:underline text-[11px]"
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Consultar pedidos</span>
+                        <Switch
+                          checked={activePerms.pedidos?.ver ?? true}
+                          onCheckedChange={() => togglePermission("pedidos", "ver")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Crear pedidos</span>
+                        <Switch
+                          checked={activePerms.pedidos?.crear ?? true}
+                          onCheckedChange={() => togglePermission("pedidos", "crear")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Editar pedidos</span>
+                        <Switch
+                          checked={activePerms.pedidos?.editar ?? false}
+                          onCheckedChange={() => togglePermission("pedidos", "editar")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold text-rose-600">Anular pedidos</span>
+                          <p className="text-[10px] text-muted-foreground">Cancelar orden</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.pedidos?.anular ?? false}
+                          onCheckedChange={() => togglePermission("pedidos", "anular")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Despachar / Entregar</span>
+                          <p className="text-[10px] text-muted-foreground">Asignar chofer y marcar entrega</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.pedidos?.despachar ?? false}
+                          onCheckedChange={() => togglePermission("pedidos", "despachar")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 7. Módulo Productos & Catálogo */}
+                  <div className="p-4 rounded-xl border bg-card space-y-3">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <div className="flex items-center gap-2">
+                        <Boxes className="size-4 text-teal-600" />
+                        <span className="font-bold text-sm">Módulo Productos & Catálogo</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("productos", true)}
+                          className="text-primary hover:underline text-[11px]"
+                        >
+                          Marcar todos
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setModuleAll("productos", false)}
+                          className="text-muted-foreground hover:underline text-[11px]"
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Ver Catálogo</span>
+                          <p className="text-[10px] text-muted-foreground">Consultar productos y precios</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.productos?.ver_catalogo ?? true}
+                          onCheckedChange={() => togglePermission("productos", "ver_catalogo")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Gestionar Productos</span>
+                          <p className="text-[10px] text-muted-foreground">Crear, editar precios y stock</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.productos?.gestionar_productos ?? false}
+                          onCheckedChange={() => togglePermission("productos", "gestionar_productos")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Gestionar Categorías</span>
+                          <p className="text-[10px] text-muted-foreground">Crear y organizar categorías</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.productos?.gestionar_categorias ?? false}
+                          onCheckedChange={() => togglePermission("productos", "gestionar_categorias")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 8. Módulo Finanzas & Caja */}
                   <div className="p-4 rounded-xl border bg-card space-y-3">
                     <div className="flex items-center justify-between border-b pb-2">
                       <div className="flex items-center gap-2">
                         <DollarSign className="size-4 text-amber-600" />
-                        <span className="font-bold text-sm">Módulo Finanzas & Flujo de Caja</span>
+                        <span className="font-bold text-sm">Módulo Finanzas & Caja</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <button
@@ -801,34 +1250,34 @@ export default function RolesManagementPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
                         <div>
                           <span className="text-xs font-semibold">Ver Flujo de Caja</span>
                           <p className="text-[10px] text-muted-foreground">Acceso a /finanzas/cash-flow</p>
                         </div>
                         <Switch
-                          checked={activePerms.finanzas.ver_flujo}
+                          checked={activePerms.finanzas?.ver_flujo ?? false}
                           onCheckedChange={() => togglePermission("finanzas", "ver_flujo")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
                         <div>
                           <span className="text-xs font-semibold">Registrar Movimientos</span>
-                          <p className="text-[10px] text-muted-foreground">Ingresos y egresos de caja</p>
+                          <p className="text-[10px] text-muted-foreground">Ingresos y egresos</p>
                         </div>
                         <Switch
-                          checked={activePerms.finanzas.registrar_movimiento}
+                          checked={activePerms.finanzas?.registrar_movimiento ?? false}
                           onCheckedChange={() => togglePermission("finanzas", "registrar_movimiento")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
                         <div>
                           <span className="text-xs font-semibold">Ver Cuentas Bancarias</span>
-                          <p className="text-[10px] text-muted-foreground">Saldos BCP, BBVA, Yape, Plin</p>
+                          <p className="text-[10px] text-muted-foreground">Saldos BCP, BBVA, billeteras</p>
                         </div>
                         <Switch
-                          checked={activePerms.finanzas.ver_cuentas_bancarias}
+                          checked={activePerms.finanzas?.ver_cuentas_bancarias ?? false}
                           onCheckedChange={() => togglePermission("finanzas", "ver_cuentas_bancarias")}
                         />
                       </div>
@@ -838,14 +1287,35 @@ export default function RolesManagementPage() {
                           <p className="text-[10px] text-muted-foreground">Borrar asientos contables</p>
                         </div>
                         <Switch
-                          checked={activePerms.finanzas.anular_movimiento}
+                          checked={activePerms.finanzas?.anular_movimiento ?? false}
                           onCheckedChange={() => togglePermission("finanzas", "anular_movimiento")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Compras & Proveedores</span>
+                        <Switch
+                          checked={activePerms.finanzas?.compras ?? false}
+                          onCheckedChange={() => togglePermission("finanzas", "compras")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Gastos Operativos</span>
+                        <Switch
+                          checked={activePerms.finanzas?.gastos ?? false}
+                          onCheckedChange={() => togglePermission("finanzas", "gastos")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <span className="text-xs">Deudas & Cobranzas</span>
+                        <Switch
+                          checked={activePerms.finanzas?.deudas ?? false}
+                          onCheckedChange={() => togglePermission("finanzas", "deudas")}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Módulo Rentabilidad & Costos */}
+                  {/* 9. Módulo Rentabilidad & Costos */}
                   <div className="p-4 rounded-xl border bg-card space-y-3">
                     <div className="flex items-center justify-between border-b pb-2">
                       <div className="flex items-center gap-2">
@@ -875,20 +1345,20 @@ export default function RolesManagementPage() {
                       <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
                         <div>
                           <span className="text-xs font-semibold">Ver Márgenes y Ganancia Neta</span>
-                          <p className="text-[10px] text-muted-foreground">Cálculo de rentabilidad sin IGV</p>
+                          <p className="text-[10px] text-muted-foreground">Rentabilidad sin IGV</p>
                         </div>
                         <Switch
-                          checked={activePerms.rentabilidad.ver_margenes}
+                          checked={activePerms.rentabilidad?.ver_margenes ?? false}
                           onCheckedChange={() => togglePermission("rentabilidad", "ver_margenes")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
                         <div>
                           <span className="text-xs font-semibold">Ver Costos y Gastos Operativos</span>
-                          <p className="text-[10px] text-muted-foreground">Estructura de costos fijos/variables</p>
+                          <p className="text-[10px] text-muted-foreground">Estructura de costos</p>
                         </div>
                         <Switch
-                          checked={activePerms.rentabilidad.ver_costos}
+                          checked={activePerms.rentabilidad?.ver_costos ?? false}
                           onCheckedChange={() => togglePermission("rentabilidad", "ver_costos")}
                         />
                       </div>
@@ -898,29 +1368,29 @@ export default function RolesManagementPage() {
                           <p className="text-[10px] text-muted-foreground">Acceso a /rentabilidad/simulador</p>
                         </div>
                         <Switch
-                          checked={activePerms.rentabilidad.simulador}
+                          checked={activePerms.rentabilidad?.simulador ?? false}
                           onCheckedChange={() => togglePermission("rentabilidad", "simulador")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
                         <div>
                           <span className="text-xs font-semibold">Configuración de Perfiles</span>
-                          <p className="text-[10px] text-muted-foreground">Ajuste de comisiones y bidón</p>
+                          <p className="text-[10px] text-muted-foreground">Ajuste de comisiones y escalas</p>
                         </div>
                         <Switch
-                          checked={activePerms.rentabilidad.configurar_perfiles}
+                          checked={activePerms.rentabilidad?.configurar_perfiles ?? false}
                           onCheckedChange={() => togglePermission("rentabilidad", "configurar_perfiles")}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Módulo Planilla & Liquidaciones */}
+                  {/* 10. Módulo Nómina & Personal */}
                   <div className="p-4 rounded-xl border bg-card space-y-3">
                     <div className="flex items-center justify-between border-b pb-2">
                       <div className="flex items-center gap-2">
                         <Briefcase className="size-4 text-blue-600" />
-                        <span className="font-bold text-sm">Módulo Nómina & Liquidación de Pagos</span>
+                        <span className="font-bold text-sm">Módulo Nómina & Personal</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <button
@@ -941,14 +1411,14 @@ export default function RolesManagementPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
                         <div>
                           <span className="text-xs font-semibold">Ver Directorio de Personal</span>
-                          <p className="text-[10px] text-muted-foreground">Lista de trabajadores y cargos</p>
+                          <p className="text-[10px] text-muted-foreground">Lista de colaboradores y cargos</p>
                         </div>
                         <Switch
-                          checked={activePerms.payroll.ver_personal}
+                          checked={activePerms.payroll?.ver_personal ?? false}
                           onCheckedChange={() => togglePermission("payroll", "ver_personal")}
                         />
                       </div>
@@ -958,90 +1428,49 @@ export default function RolesManagementPage() {
                           <p className="text-[10px] text-muted-foreground">Editar sueldos y datos de contrato</p>
                         </div>
                         <Switch
-                          checked={activePerms.payroll.gestionar_personal}
+                          checked={activePerms.payroll?.gestionar_personal ?? false}
                           onCheckedChange={() => togglePermission("payroll", "gestionar_personal")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
                         <div>
-                          <span className="text-xs font-semibold">Ver Liquidaciones de Comisiones</span>
-                          <p className="text-[10px] text-muted-foreground">Acceso a /rentabilidad/liquidaciones</p>
+                          <span className="text-xs font-semibold">Registro de Asistencia</span>
+                          <p className="text-[10px] text-muted-foreground">Asistencia diaria y mensual</p>
                         </div>
                         <Switch
-                          checked={activePerms.payroll.ver_liquidaciones}
+                          checked={activePerms.payroll?.asistencia ?? false}
+                          onCheckedChange={() => togglePermission("payroll", "asistencia")}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
+                        <div>
+                          <span className="text-xs font-semibold">Ver Liquidaciones</span>
+                          <p className="text-[10px] text-muted-foreground">Acceso a liquidaciones de comisión</p>
+                        </div>
+                        <Switch
+                          checked={activePerms.payroll?.ver_liquidaciones ?? false}
                           onCheckedChange={() => togglePermission("payroll", "ver_liquidaciones")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20">
                         <div>
-                          <span className="text-xs font-semibold text-emerald-600">Dispersar / Pagar Liquidaciones</span>
+                          <span className="text-xs font-semibold text-emerald-600">Dispersar / Pagar Comisiones</span>
                           <p className="text-[10px] text-muted-foreground">Generar egreso en caja por comisiones</p>
                         </div>
                         <Switch
-                          checked={activePerms.payroll.pagar_comisiones}
+                          checked={activePerms.payroll?.pagar_comisiones ?? false}
                           onCheckedChange={() => togglePermission("payroll", "pagar_comisiones")}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Módulo Clientes & Contactos */}
-                  <div className="p-4 rounded-xl border bg-card space-y-3">
-                    <div className="flex items-center justify-between border-b pb-2">
-                      <div className="flex items-center gap-2">
-                        <Users className="size-4 text-cyan-600" />
-                        <span className="font-bold text-sm">Módulo Clientes & WhatsApp CRM</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setModuleAll("clientes", true)}
-                          className="text-primary hover:underline text-[11px]"
-                        >
-                          Marcar todos
-                        </button>
-                        <span>•</span>
-                        <button
-                          type="button"
-                          onClick={() => setModuleAll("clientes", false)}
-                          className="text-muted-foreground hover:underline text-[11px]"
-                        >
-                          Desmarcar
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
-                        <span className="text-xs">Ver todos los clientes</span>
-                        <Switch
-                          checked={activePerms.clientes.ver_todos}
-                          onCheckedChange={() => togglePermission("clientes", "ver_todos")}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
-                        <span className="text-xs">Crear contactos</span>
-                        <Switch
-                          checked={activePerms.clientes.crear}
-                          onCheckedChange={() => togglePermission("clientes", "crear")}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
-                        <span className="text-xs">Chatear por WhatsApp</span>
-                        <Switch
-                          checked={activePerms.clientes.chatear_whatsapp}
-                          onCheckedChange={() => togglePermission("clientes", "chatear_whatsapp")}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Módulo Administración & Configuración */}
+                  {/* 11. Módulo Administración & Configuración */}
                   <div className="p-4 rounded-xl border bg-card space-y-3">
                     <div className="flex items-center justify-between border-b pb-2">
                       <div className="flex items-center gap-2">
                         <Settings className="size-4 text-purple-600" />
-                        <span className="font-bold text-sm">Módulo Administración del Sistema</span>
+                        <span className="font-bold text-sm">Módulo Administración & Ajustes del Sistema</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <button
@@ -1064,23 +1493,32 @@ export default function RolesManagementPage() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
-                        <span className="text-xs">Gestionar usuarios</span>
+                        <div>
+                          <span className="text-xs font-semibold">Gestionar Usuarios</span>
+                          <p className="text-[10px] text-muted-foreground">Crear y vincular usuarios</p>
+                        </div>
                         <Switch
-                          checked={activePerms.admin.gestionar_usuarios}
+                          checked={activePerms.admin?.gestionar_usuarios ?? false}
                           onCheckedChange={() => togglePermission("admin", "gestionar_usuarios")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
-                        <span className="text-xs">Configurar roles</span>
+                        <div>
+                          <span className="text-xs font-semibold">Configurar Roles</span>
+                          <p className="text-[10px] text-muted-foreground">Editar permisos de perfiles</p>
+                        </div>
                         <Switch
-                          checked={activePerms.admin.gestionar_roles}
+                          checked={activePerms.admin?.gestionar_roles ?? false}
                           onCheckedChange={() => togglePermission("admin", "gestionar_roles")}
                         />
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/20">
-                        <span className="text-xs">Ajustes del negocio</span>
+                        <div>
+                          <span className="text-xs font-semibold">Ajustes del Negocio</span>
+                          <p className="text-[10px] text-muted-foreground">Configuración global y parámetros</p>
+                        </div>
                         <Switch
-                          checked={activePerms.admin.ajustes_sistema}
+                          checked={activePerms.admin?.ajustes_sistema ?? false}
                           onCheckedChange={() => togglePermission("admin", "ajustes_sistema")}
                         />
                       </div>

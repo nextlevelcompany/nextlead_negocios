@@ -16,10 +16,50 @@ import java.util.*;
 public class SalesController {
 
     private final JdbcTemplate jdbcTemplate;
+    private final com.nextlead.dao.UserDao userDao;
 
     @Autowired
-    public SalesController(JdbcTemplate jdbcTemplate) {
+    public SalesController(JdbcTemplate jdbcTemplate, com.nextlead.dao.UserDao userDao) {
         this.jdbcTemplate = jdbcTemplate;
+        this.userDao = userDao;
+    }
+
+    private Object[] resolveUserScope() {
+        Integer usuarioId = null;
+        Long trabajadorId = null;
+        String scope = "all";
+        try {
+            org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
+                java.util.Optional<com.nextlead.models.User> uOpt = userDao.findByUsername(auth.getName());
+                if (uOpt.isPresent()) {
+                    com.nextlead.models.User u = uOpt.get();
+                    String role = u.getRole() != null ? u.getRole().toUpperCase() : "ADMIN";
+                    if (!"ADMIN".equals(role)) {
+                        usuarioId = u.getId() != null ? u.getId().intValue() : null;
+                        try {
+                            String s = jdbcTemplate.queryForObject(
+                                "SELECT sales_scope FROM roles_sistema WHERE UPPER(codigo) = ?", String.class, role);
+                            if (s != null) scope = s.toLowerCase();
+                            else scope = "VENDEDOR".equals(role) ? "own" : ("SUPERVISOR".equals(role) ? "team" : "all");
+                        } catch (Exception e) {
+                            scope = "VENDEDOR".equals(role) ? "own" : ("SUPERVISOR".equals(role) ? "team" : "all");
+                        }
+                        try {
+                            Long tid = jdbcTemplate.queryForObject(
+                                "SELECT id FROM trabajadores WHERE usuario_id = ? LIMIT 1", Long.class, u.getId());
+                            if (tid != null) trabajadorId = tid;
+                        } catch (Exception ignored) {}
+                        if (trabajadorId == null && u.getModules() != null && u.getModules().contains("\"trabajador_id\":")) {
+                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"trabajador_id\"\\s*:\\s*(\\d+)").matcher(u.getModules());
+                            if (m.find()) trabajadorId = Long.parseLong(m.group(1));
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return new Object[]{ usuarioId, trabajadorId, scope };
     }
 
     private String getSetting(String key, String defaultVal) {
@@ -37,6 +77,29 @@ public class SalesController {
     @GetMapping
     public ResponseEntity<?> getSalesList() {
         try {
+            Object[] scopeInfo = resolveUserScope();
+            Integer authUsuarioId = (Integer) scopeInfo[0];
+            Long authTrabajadorId = (Long) scopeInfo[1];
+            String scope = (String) scopeInfo[2];
+
+            String whereClause = "";
+            List<Object> params = new ArrayList<>();
+            if ("own".equals(scope)) {
+                if (authTrabajadorId != null) {
+                    whereClause = "WHERE (v.trabajador_id = ? OR (v.trabajador_id IS NULL AND v.usuario_id = ?)) ";
+                    params.add(authTrabajadorId.intValue());
+                    params.add(authUsuarioId != null ? authUsuarioId : -1);
+                } else if (authUsuarioId != null) {
+                    whereClause = "WHERE (v.usuario_id = ?) ";
+                    params.add(authUsuarioId);
+                }
+            } else if ("team".equals(scope) && authTrabajadorId != null) {
+                whereClause = "WHERE (v.supervisor_id = ? OR v.trabajador_id = ? OR t.supervisor_id = ?) ";
+                params.add(authTrabajadorId.intValue());
+                params.add(authTrabajadorId.intValue());
+                params.add(authTrabajadorId.intValue());
+            }
+
             String sql = 
                 "SELECT v.*, " +
                 "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as cliente_nombre_completo, " +
@@ -58,9 +121,12 @@ public class SalesController {
                 "LEFT JOIN trabajadores t ON v.trabajador_id = t.id " +
                 "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
                 "LEFT JOIN trabajadores sup ON COALESCE(v.supervisor_id, t.supervisor_id) = sup.id " +
+                whereClause +
                 "ORDER BY v.fecha_venta DESC, v.id DESC";
             
-            List<Map<String, Object>> sales = jdbcTemplate.queryForList(sql);
+            List<Map<String, Object>> sales = params.isEmpty()
+                ? jdbcTemplate.queryForList(sql)
+                : jdbcTemplate.queryForList(sql, params.toArray());
             return ResponseEntity.ok(sales);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -302,13 +368,22 @@ public class SalesController {
             Long ventaId;
             String numeroVenta;
 
-            Integer defaultUserId = 1;
-            try {
-                defaultUserId = jdbcTemplate.queryForObject("SELECT id FROM users LIMIT 1", Integer.class);
-            } catch (Exception ignored) {}
+            Object[] saveScopeInfo = resolveUserScope();
+            Integer authSaveUsuarioId = (Integer) saveScopeInfo[0];
+            Long authSaveTrabajadorId = (Long) saveScopeInfo[1];
+            String saveScope = (String) saveScopeInfo[2];
+
+            Integer defaultUserId = authSaveUsuarioId != null ? authSaveUsuarioId : 1;
+            if (authSaveUsuarioId == null) {
+                try {
+                    defaultUserId = jdbcTemplate.queryForObject("SELECT id FROM users LIMIT 1", Integer.class);
+                } catch (Exception ignored) {}
+            }
 
             Integer trabajadorId = req.trabajador_id;
-            if (trabajadorId == null) {
+            if ("own".equals(saveScope) && authSaveTrabajadorId != null) {
+                trabajadorId = authSaveTrabajadorId.intValue();
+            } else if (trabajadorId == null) {
                 try {
                     trabajadorId = jdbcTemplate.queryForObject("SELECT id FROM trabajadores WHERE estado = 'Activo' ORDER BY id ASC LIMIT 1", Integer.class);
                 } catch (Exception ignored) {}
