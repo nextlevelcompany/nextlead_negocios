@@ -253,12 +253,14 @@ export function UserDropdown() {
 
         {/* Acceso Rápido y Navegación */}
         <DropdownMenuGroup>
-          <DropdownMenuItem asChild className="gap-2.5 h-9 cursor-pointer">
-            <Link href="/admin/users">
-              <Users className="size-4 text-primary" />
-              <span className="flex-1 font-medium text-sm">Administrar Usuarios & Accesos</span>
-            </Link>
-          </DropdownMenuItem>
+          {currentUser?.role === "ADMIN" && (
+            <DropdownMenuItem asChild className="gap-2.5 h-9 cursor-pointer">
+              <Link href="/admin/users">
+                <Users className="size-4 text-primary" />
+                <span className="flex-1 font-medium text-sm">Administrar Usuarios & Accesos</span>
+              </Link>
+            </DropdownMenuItem>
+          )}
 
           <DropdownMenuItem asChild className="gap-2.5 h-9 cursor-pointer">
             <Link href="/ventas/view">
@@ -276,53 +278,6 @@ export function UserDropdown() {
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator className="my-2" />
-
-        {/* Switcher rápido de roles / usuarios (Ideal para probar vistas de vendedor vs admin) */}
-        {allUsers.length > 1 && (
-          <>
-            <div className="px-2 py-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Cambiar Usuario Activo
-                </span>
-                <span className="text-[10px] text-muted-foreground">({allUsers.length} disponibles)</span>
-              </div>
-              <div className="mt-1.5 max-h-36 overflow-y-auto space-y-1 pr-1">
-                {allUsers.map((u) => {
-                  const isCurrent = currentUser?.id === u.id || currentUser?.username === u.username
-                  const rInfo = roleLabel(u.role)
-                  const uName = `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.username
-
-                  return (
-                    <button
-                      key={u.id || u.username}
-                      type="button"
-                      onClick={() => handleSwitchUser(u)}
-                      className={`w-full flex items-center justify-between text-left px-2 py-1.5 rounded text-xs transition-colors ${
-                        isCurrent
-                          ? "bg-primary/10 text-primary font-semibold"
-                          : "hover:bg-muted text-foreground"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <Avatar className="size-5 shrink-0">
-                          <AvatarFallback className="text-[9px]">
-                            {getInitials(uName, "U")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="truncate">{uName}</span>
-                      </div>
-                      <Badge variant="outline" className={`text-[9px] px-1 py-0 ml-1.5 shrink-0 ${rInfo.color}`}>
-                        {u.role}
-                      </Badge>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-            <DropdownMenuSeparator className="my-2" />
-          </>
-        )}
 
         {/* Botón de Logout */}
         <div className="p-1">

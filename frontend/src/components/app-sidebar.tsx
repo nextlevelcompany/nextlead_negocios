@@ -332,6 +332,7 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
 export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
   const [gestionaStock, setGestionaStock] = React.useState<boolean>(false)
   const [tipoModelo, setTipoModelo] = React.useState<string>("TELECOM")
+  const [currentUser, setCurrentUser] = React.useState<any>(null)
 
   React.useEffect(() => {
     const updateFromSettings = () => {
@@ -339,8 +340,14 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
       if (typeof window !== "undefined") {
         const cachedModel = localStorage.getItem("negocio.tipo_modelo")
         const cachedStock = localStorage.getItem("negocio.gestiona_stock")
+        const cachedUser = localStorage.getItem("crm_active_user")
         if (cachedModel) setTipoModelo(cachedModel)
         if (cachedStock !== null) setGestionaStock(cachedStock === "true")
+        if (cachedUser) {
+          try {
+            setCurrentUser(JSON.parse(cachedUser))
+          } catch {}
+        }
       }
 
       // 2. Consultar API para sincronizar
@@ -370,36 +377,99 @@ export function AppSidebar({ onHoverChange, ...props }: AppSidebarProps) {
     updateFromSettings()
     if (typeof window !== "undefined") {
       window.addEventListener("business-settings-changed", updateFromSettings)
-      return () => window.removeEventListener("business-settings-changed", updateFromSettings)
+      window.addEventListener("storage", updateFromSettings)
+      return () => {
+        window.removeEventListener("business-settings-changed", updateFromSettings)
+        window.removeEventListener("storage", updateFromSettings)
+      }
     }
   }, [])
 
-  // Filtrar modularmente los menús según el modelo de negocio
+  // Filtrar modularmente los menús según el modelo de negocio y roles del usuario
   const filteredNavGroups = React.useMemo(() => {
-    return data.navGroups.map((group) => {
-      if (group.label === "GESTIÓN") {
-        return {
-          ...group,
-          items: group.items.map((item) => {
-            if (item.title === "Finanzas") {
-              return {
-                ...item,
-                items: item.items.filter((sub) => {
-                  // Ocultar Compras si es Telecomunicaciones y no se gestiona stock propio de hardware
-                  if (sub.title === "Compras" && tipoModelo === "TELECOM" && !gestionaStock) {
-                    return false
-                  }
-                  return true
-                }),
-              }
-            }
-            return item
-          }),
+    const role = (currentUser?.role || "ADMIN").toUpperCase()
+    const modulesStr = currentUser?.modules
+    let permissions: any = {}
+    if (modulesStr) {
+      try {
+        permissions = typeof modulesStr === "string" ? JSON.parse(modulesStr) : modulesStr
+      } catch {}
+    }
+    const isAdmin = role === "ADMIN"
+    const isSupervisor = role === "SUPERVISOR"
+    const isVendedor = role === "VENDEDOR"
+
+    return data.navGroups
+      .map((group) => {
+        // 1. Grupo SISTEMA: Solo visible para administradores
+        if (group.label === "SISTEMA") {
+          if (!isAdmin && !permissions.can_manage_users) {
+            return null
+          }
         }
-      }
-      return group
-    })
-  }, [tipoModelo, gestionaStock])
+
+        // 2. Grupo GESTIÓN: Finanzas, Rentabilidad, Personal
+        if (group.label === "GESTIÓN") {
+          if (isVendedor && !permissions.can_view_finance && !permissions.can_view_profitability) {
+            return null
+          }
+          return {
+            ...group,
+            items: group.items
+              .filter((item) => {
+                if (item.title === "Finanzas") {
+                  return isAdmin || isSupervisor || permissions.can_view_finance
+                }
+                if (item.title === "Rentabilidad y Comisiones") {
+                  return isAdmin || isSupervisor || permissions.can_view_profitability
+                }
+                if (item.title === "Personal") {
+                  return isAdmin || isSupervisor
+                }
+                return true
+              })
+              .map((item) => {
+                if (item.title === "Finanzas") {
+                  return {
+                    ...item,
+                    items: item.items.filter((sub) => {
+                      if (sub.title === "Compras" && tipoModelo === "TELECOM" && !gestionaStock) {
+                        return false
+                      }
+                      return true
+                    }),
+                  }
+                }
+                return item
+              }),
+          }
+        }
+
+        // 3. Grupo COMERCIAL: Ocultar "Asignación de Cartera" a Vendedores
+        if (group.label === "COMERCIAL") {
+          return {
+            ...group,
+            items: group.items.map((item) => {
+              if (item.title === "Contactos") {
+                return {
+                  ...item,
+                  items: item.items.filter((sub) => {
+                    if (sub.title === "Asignación de Cartera" && !isAdmin && !isSupervisor) {
+                      return false
+                    }
+                    return true
+                  }),
+                }
+              }
+              return item
+            }),
+          }
+        }
+
+        return group
+      })
+      .filter(Boolean) as typeof data.navGroups
+  }, [tipoModelo, gestionaStock, currentUser])
 
   return (
      <div

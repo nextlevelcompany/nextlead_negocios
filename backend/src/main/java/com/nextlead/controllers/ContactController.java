@@ -22,14 +22,44 @@ import java.util.Optional;
 public class ContactController {
 
     private final ContactDao contactDao;
+    private final com.nextlead.dao.UserDao userDao;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final ContactExcelService contactExcelService;
 
     @Autowired
-    public ContactController(ContactDao contactDao, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate, ContactExcelService contactExcelService) {
+    public ContactController(ContactDao contactDao, com.nextlead.dao.UserDao userDao, org.springframework.jdbc.core.JdbcTemplate jdbcTemplate, ContactExcelService contactExcelService) {
         this.contactDao = contactDao;
+        this.userDao = userDao;
         this.jdbcTemplate = jdbcTemplate;
         this.contactExcelService = contactExcelService;
+    }
+
+    private Object[] resolveUserScope(Integer usuarioId, Long trabajadorId, String scope) {
+        try {
+            org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName()) && !"admin".equalsIgnoreCase(auth.getName())) {
+                Optional<com.nextlead.models.User> uOpt = userDao.findByUsername(auth.getName());
+                if (uOpt.isPresent()) {
+                    com.nextlead.models.User u = uOpt.get();
+                    if (!"ADMIN".equalsIgnoreCase(u.getRole())) {
+                        usuarioId = u.getId() != null ? u.getId().intValue() : usuarioId;
+                        scope = "own";
+                        if (trabajadorId == null) {
+                            try {
+                                Long tid = jdbcTemplate.queryForObject("SELECT id FROM trabajadores WHERE usuario_id = ? LIMIT 1", Long.class, u.getId());
+                                if (tid != null) trabajadorId = tid;
+                            } catch (Exception ignored) {}
+                            if (trabajadorId == null && u.getModules() != null && u.getModules().contains("\"trabajador_id\":")) {
+                                java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"trabajador_id\"\\s*:\\s*(\\d+)").matcher(u.getModules());
+                                if (m.find()) trabajadorId = Long.parseLong(m.group(1));
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return new Object[]{ usuarioId, trabajadorId, scope };
     }
 
     // GET /api/contacts/template — Descargar plantilla de ejemplo Excel (.xlsx)
@@ -66,7 +96,31 @@ public class ContactController {
 
     // GET /api/contacts/stats — KPIs agregados de contactos y semáforos Experian
     @GetMapping("/stats")
-    public ResponseEntity<?> getStats() {
+    public ResponseEntity<?> getStats(
+            @RequestParam(required = false) Integer usuarioId,
+            @RequestParam(required = false) Long trabajadorId,
+            @RequestParam(required = false) String scope) {
+        Object[] resolved = resolveUserScope(usuarioId, trabajadorId, scope);
+        usuarioId = (Integer) resolved[0];
+        trabajadorId = (Long) resolved[1];
+        scope = (String) resolved[2];
+
+        StringBuilder where = new StringBuilder(" WHERE 1=1 ");
+        List<Object> params = new ArrayList<>();
+        if ("own".equalsIgnoreCase(scope) || (usuarioId != null || trabajadorId != null)) {
+            if (usuarioId != null && trabajadorId != null) {
+                where.append(" AND (c.asignado_a_id = ? OR c.trabajador_id = ?) ");
+                params.add(usuarioId);
+                params.add(trabajadorId);
+            } else if (usuarioId != null) {
+                where.append(" AND c.asignado_a_id = ? ");
+                params.add(usuarioId);
+            } else if (trabajadorId != null) {
+                where.append(" AND c.trabajador_id = ? ");
+                params.add(trabajadorId);
+            }
+        }
+
         String sql = """
             SELECT
                 COUNT(*) as total,
@@ -77,25 +131,33 @@ public class ContactController {
                 COUNT(*) FILTER (WHERE UPPER(semaforo_experian) = 'AMARILLO') as semaforo_amarillo,
                 COUNT(*) FILTER (WHERE UPPER(semaforo_experian) = 'ROJO') as semaforo_rojo,
                 COUNT(*) FILTER (WHERE UPPER(semaforo_experian) = 'GRIS') as semaforo_gris
-            FROM contacts;
-            """;
-        return ResponseEntity.ok(jdbcTemplate.queryForMap(sql));
+            FROM contacts c
+            """ + where;
+        return ResponseEntity.ok(jdbcTemplate.queryForMap(sql, params.toArray()));
     }
 
-    // GET /api/contacts — Todos los contactos (soporta paginación o listado directo)
+    // GET /api/contacts — Todos los contactos (soporta paginación o listado directo con alcance de usuario)
     @GetMapping
     public ResponseEntity<?> getAll(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String tipoPersona,
-            @RequestParam(required = false) String semaforo) {
+            @RequestParam(required = false) String semaforo,
+            @RequestParam(required = false) Integer usuarioId,
+            @RequestParam(required = false) Long trabajadorId,
+            @RequestParam(required = false) String scope) {
+        Object[] resolved = resolveUserScope(usuarioId, trabajadorId, scope);
+        usuarioId = (Integer) resolved[0];
+        trabajadorId = (Long) resolved[1];
+        scope = (String) resolved[2];
+
         if (page != null) {
             int pageSize = (size != null && size > 0) ? size : 20;
-            return ResponseEntity.ok(contactDao.findPaginated(page, pageSize, search, tipoPersona, semaforo));
+            return ResponseEntity.ok(contactDao.findPaginated(page, pageSize, search, tipoPersona, semaforo, usuarioId, trabajadorId, scope));
         }
         int defaultSize = (size != null && size > 0) ? Math.min(size, 500) : 200;
-        return ResponseEntity.ok(contactDao.findPaginated(0, defaultSize, search, tipoPersona, semaforo).get("content"));
+        return ResponseEntity.ok(contactDao.findPaginated(0, defaultSize, search, tipoPersona, semaforo, usuarioId, trabajadorId, scope).get("content"));
     }
 
     // =======================================================
@@ -183,15 +245,22 @@ public class ContactController {
         return ResponseEntity.ok(java.util.Map.of("success", true, "updated", updated));
     }
 
-    // GET /api/contacts/paginated — Paginación explícita optimizada para 50k+ registros
+    // GET /api/contacts/paginated — Paginación explícita optimizada con alcance de usuario
     @GetMapping("/paginated")
     public ResponseEntity<?> getPaginated(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String tipoPersona,
-            @RequestParam(required = false) String semaforo) {
-        return ResponseEntity.ok(contactDao.findPaginated(page, size, search, tipoPersona, semaforo));
+            @RequestParam(required = false) String semaforo,
+            @RequestParam(required = false) Integer usuarioId,
+            @RequestParam(required = false) Long trabajadorId,
+            @RequestParam(required = false) String scope) {
+        Object[] resolved = resolveUserScope(usuarioId, trabajadorId, scope);
+        usuarioId = (Integer) resolved[0];
+        trabajadorId = (Long) resolved[1];
+        scope = (String) resolved[2];
+        return ResponseEntity.ok(contactDao.findPaginated(page, size, search, tipoPersona, semaforo, usuarioId, trabajadorId, scope));
     }
 
     // GET /api/contacts/search?phone={phone} — Buscar contacto por teléfono

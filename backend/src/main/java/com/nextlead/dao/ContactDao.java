@@ -23,6 +23,7 @@ public interface ContactDao {
     List<Ubigeo> findAllUbigeos();
     long count();
     java.util.Map<String, Object> findPaginated(int page, int size, String search, String tipoPersona, String semaforo);
+    java.util.Map<String, Object> findPaginated(int page, int size, String search, String tipoPersona, String semaforo, Integer usuarioId, Long trabajadorId, String scope);
     java.util.Map<String, Object> findCarteraPaginated(int page, int size, String search, String semaforo, String asignadoFilter, Integer usuarioId, Long trabajadorId, Integer diasMin, Boolean conOportunidades);
     java.util.Map<String, Object> getCarteraStats();
     int assignContacts(List<Long> contactIds, Integer usuarioId, Long trabajadorId);

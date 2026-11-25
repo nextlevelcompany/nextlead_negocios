@@ -146,10 +146,45 @@ export default function ContactsDirectoryPage() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
 
+  // Usuario activo y permisos de alcance
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userPermissions, setUserPermissions] = useState<any>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("crm_active_user");
+      if (stored) {
+        try {
+          const u = JSON.parse(stored);
+          setCurrentUser(u);
+          if (u.modules) {
+            setUserPermissions(typeof u.modules === "string" ? JSON.parse(u.modules) : u.modules);
+          }
+        } catch {}
+      }
+    }
+  }, []);
+
+  const isRestricted = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || "").toUpperCase();
+    if (role === "ADMIN") return false;
+    if (role === "VENDEDOR") return true;
+    if (userPermissions?.sales_scope === "own") return true;
+    if (userPermissions?.clientes?.ver_todos === false) return true;
+    return false;
+  }, [currentUser, userPermissions]);
+
   // Load KPI Stats from Backend
   const loadStats = async () => {
     try {
-      const res = await api.get("/api/contacts/stats");
+      const params: any = {};
+      if (isRestricted && currentUser) {
+        params.usuarioId = currentUser.id;
+        params.scope = "own";
+        if (userPermissions?.trabajador_id) params.trabajadorId = userPermissions.trabajador_id;
+      }
+      const res = await api.get("/api/contacts/stats", { params });
       if (res.data) setStats(res.data);
     } catch (e) {
       console.error("Error loading stats:", e);
@@ -160,15 +195,19 @@ export default function ContactsDirectoryPage() {
   const loadContacts = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/api/contacts/paginated", {
-        params: {
-          page,
-          size: pageSize,
-          search: searchTerm.trim() || undefined,
-          tipoPersona: filterType !== "ALL" ? filterType : undefined,
-          semaforo: filterSemaforo !== "ALL" ? filterSemaforo : undefined,
-        },
-      });
+      const params: any = {
+        page,
+        size: pageSize,
+        search: searchTerm.trim() || undefined,
+        tipoPersona: filterType !== "ALL" ? filterType : undefined,
+        semaforo: filterSemaforo !== "ALL" ? filterSemaforo : undefined,
+      };
+      if (isRestricted && currentUser) {
+        params.usuarioId = currentUser.id;
+        params.scope = "own";
+        if (userPermissions?.trabajador_id) params.trabajadorId = userPermissions.trabajador_id;
+      }
+      const res = await api.get("/api/contacts/paginated", { params });
       if (res.data && res.data.content) {
         setContacts(res.data.content);
         setTotalElements(res.data.totalElements || 0);
@@ -195,11 +234,11 @@ export default function ContactsDirectoryPage() {
       loadContacts();
     }, 200);
     return () => clearTimeout(handler);
-  }, [page, pageSize, searchTerm, filterType, filterSemaforo]);
+  }, [page, pageSize, searchTerm, filterType, filterSemaforo, currentUser, isRestricted]);
 
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [currentUser, isRestricted]);
 
   // Filter Contacts for Client-side Toggles (Starred / AI)
   const filteredContacts = useMemo(() => {
@@ -326,9 +365,16 @@ export default function ContactsDirectoryPage() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Users className="size-5 sm:size-6 text-emerald-600 shrink-0" />
             Directorio de Contactos & Clientes
+            {isRestricted && (
+              <Badge variant="outline" className="text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 font-semibold text-[11px] ml-1">
+                Cartera Asignada
+              </Badge>
+            )}
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Gestión centralizada de personas, empresas, direcciones registradas y configuración de IA.
+            {isRestricted
+              ? "Visualizando únicamente los clientes y contactos asignados a tu cartera comercial."
+              : "Gestión centralizada de personas, empresas, direcciones registradas y configuración de IA."}
           </p>
         </div>
 
@@ -366,15 +412,17 @@ export default function ContactsDirectoryPage() {
             Actualizar
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
-            onClick={() => setImportModalOpen(true)}
-          >
-            <FileSpreadsheet className="size-3.5" />
-            Importar Excel
-          </Button>
+          {!isRestricted && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+              onClick={() => setImportModalOpen(true)}
+            >
+              <FileSpreadsheet className="size-3.5" />
+              Importar Excel
+            </Button>
+          )}
 
           <Button
             size="sm"
@@ -399,7 +447,9 @@ export default function ContactsDirectoryPage() {
           <div className="text-xl sm:text-2xl font-bold mt-1 text-foreground">
             {stats.total > 0 ? stats.total.toLocaleString() : totalElements.toLocaleString()}
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">Base global de clientes</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {isRestricted ? "Asignados en tu cartera" : "Base global de clientes"}
+          </p>
         </Card>
 
         <Card className="bg-card shadow-xs p-3.5">
@@ -558,9 +608,13 @@ export default function ContactsDirectoryPage() {
       ) : filteredContacts.length === 0 ? (
         <Card className="bg-card p-12 text-center text-muted-foreground">
           <Users className="size-10 mx-auto text-muted-foreground/50 mb-3" />
-          <h3 className="font-semibold text-foreground text-sm">No se encontraron contactos</h3>
+          <h3 className="font-semibold text-foreground text-sm">
+            {isRestricted ? "No tienes contactos asignados en tu cartera" : "No se encontraron contactos"}
+          </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            Prueba ajustando los filtros o registra un nuevo contacto.
+            {isRestricted
+              ? "Actualmente no tienes cuentas asignadas a tu nombre. Tu supervisor o administrador puede asignarte clientes desde 'Asignación de Cartera'."
+              : "Prueba ajustando los filtros o registra un nuevo contacto."}
           </p>
           <Button
             size="sm"

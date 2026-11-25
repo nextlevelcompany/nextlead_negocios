@@ -360,8 +360,28 @@ public class ContactDaoImpl implements ContactDao {
 
     @Override
     public java.util.Map<String, Object> findPaginated(int page, int size, String search, String tipoPersona, String semaforo) {
+        return findPaginated(page, size, search, tipoPersona, semaforo, null, null, null);
+    }
+
+    @Override
+    public java.util.Map<String, Object> findPaginated(int page, int size, String search, String tipoPersona, String semaforo, Integer usuarioId, Long trabajadorId, String scope) {
         StringBuilder where = new StringBuilder(" WHERE 1=1 ");
         List<Object> params = new java.util.ArrayList<>();
+
+        // Filtrado por usuario / asesor asignado si aplica alcance restringido
+        if ("own".equalsIgnoreCase(scope) || (usuarioId != null || trabajadorId != null)) {
+            if (usuarioId != null && trabajadorId != null) {
+                where.append(" AND (c.asignado_a_id = ? OR c.trabajador_id = ?) ");
+                params.add(usuarioId);
+                params.add(trabajadorId);
+            } else if (usuarioId != null) {
+                where.append(" AND c.asignado_a_id = ? ");
+                params.add(usuarioId);
+            } else if (trabajadorId != null) {
+                where.append(" AND c.trabajador_id = ? ");
+                params.add(trabajadorId);
+            }
+        }
 
         if (search != null && !search.isBlank()) {
             String pattern = "%" + search.trim().toLowerCase() + "%";
