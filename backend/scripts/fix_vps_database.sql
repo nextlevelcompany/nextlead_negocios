@@ -15,8 +15,11 @@ CREATE TABLE IF NOT EXISTS roles_sistema (
     es_sistema BOOLEAN DEFAULT false,
     sales_scope VARCHAR(20) DEFAULT 'own',
     permisos JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE roles_sistema ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 -- 2. Siembra de roles oficiales del sistema
 INSERT INTO roles_sistema (codigo, nombre, descripcion, color, badge_color, es_sistema, sales_scope, permisos)

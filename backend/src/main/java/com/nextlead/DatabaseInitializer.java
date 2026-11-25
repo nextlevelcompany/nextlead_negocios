@@ -472,8 +472,10 @@ public class DatabaseInitializer implements CommandLineRunner {
             "    es_sistema BOOLEAN DEFAULT false," +
             "    sales_scope VARCHAR(20) DEFAULT 'own'," +
             "    permisos JSONB DEFAULT '{}'::jsonb," +
-            "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+            "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+            "    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
             ")",
+            "ALTER TABLE roles_sistema ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
 
             "INSERT INTO roles_sistema (codigo, nombre, descripcion, color, badge_color, es_sistema, sales_scope, permisos) VALUES " +
             "('ADMIN', 'Administrador Total', 'Acceso total e irrestricto a todos los módulos comerciales, financieros y administrativos.', '#9333ea', 'bg-purple-600', true, 'all', '{\"dashboard\":{\"ver_analitica\":true,\"ver_metricas\":true},\"whatsapp\":{\"chat\":true,\"integraciones_ia\":true},\"clientes\":{\"ver_todos\":true,\"crear\":true,\"chatear_whatsapp\":true,\"exportar\":true,\"asignar_cartera\":true},\"oportunidades\":{\"ver\":true,\"crear\":true,\"editar\":true,\"eliminar\":true,\"exportar\":true,\"configurar\":true},\"ventas\":{\"ver\":true,\"crear\":true,\"editar\":true,\"instalar\":true,\"anular\":true,\"reasignar\":true,\"exportar\":true},\"pedidos\":{\"ver\":true,\"crear\":true,\"editar\":true,\"anular\":true,\"despachar\":true},\"productos\":{\"ver_catalogo\":true,\"gestionar_productos\":true,\"gestionar_categorias\":true},\"finanzas\":{\"ver_flujo\":true,\"registrar_movimiento\":true,\"ver_cuentas_bancarias\":true,\"anular_movimiento\":true,\"compras\":true,\"gastos\":true,\"deudas\":true},\"rentabilidad\":{\"ver_margenes\":true,\"ver_costos\":true,\"simulador\":true,\"configurar_perfiles\":true},\"payroll\":{\"ver_personal\":true,\"gestionar_personal\":true,\"asistencia\":true,\"ver_liquidaciones\":true,\"pagar_comisiones\":true},\"admin\":{\"gestionar_usuarios\":true,\"gestionar_roles\":true,\"ajustes_sistema\":true}}'::jsonb), " +

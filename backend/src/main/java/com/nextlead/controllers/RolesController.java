@@ -91,6 +91,11 @@ public class RolesController {
     @PutMapping("/{codigo}")
     public ResponseEntity<?> updateRole(@PathVariable String codigo, @RequestBody Map<String, Object> body) {
         try {
+            // Asegurar que la columna updated_at exista de forma resiliente
+            try {
+                jdbcTemplate.execute("ALTER TABLE roles_sistema ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+            } catch (Exception ignored) {}
+
             Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM roles_sistema WHERE UPPER(codigo) = ?", Integer.class, codigo);
             if (count == null || count == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Rol no encontrado"));
