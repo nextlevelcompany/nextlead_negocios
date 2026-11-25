@@ -365,6 +365,7 @@ public class DatabaseInitializer implements CommandLineRunner {
             "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS calificacion_sbs VARCHAR(50)",
             "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS rango_ventas VARCHAR(100)",
             "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS cargo VARCHAR(100)",
+            "ALTER TABLE contacts ALTER COLUMN numero_documento DROP NOT NULL",
             "ALTER TABLE contacts ALTER COLUMN tipo_documento DROP NOT NULL",
             "ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_tipo_documento_check",
             "CREATE INDEX IF NOT EXISTS idx_contacts_tipo_persona ON contacts(tipo_persona)",

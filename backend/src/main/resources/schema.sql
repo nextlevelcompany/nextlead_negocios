@@ -1008,3 +1008,7 @@ ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS media_id_whatsapp VARCHAR
 ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS media_caption TEXT;
 
 ALTER TABLE shipping_coverage ADD COLUMN IF NOT EXISTS aliases TEXT;
+
+ALTER TABLE contacts ALTER COLUMN numero_documento DROP NOT NULL;
+ALTER TABLE contacts ALTER COLUMN tipo_documento DROP NOT NULL;
+ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_tipo_documento_check;

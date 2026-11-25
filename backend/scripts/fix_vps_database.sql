@@ -52,3 +52,8 @@ ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS media_caption TEXT;
 
 -- 5. Columnas para cobertura de envíos
 ALTER TABLE shipping_coverage ADD COLUMN IF NOT EXISTS aliases TEXT;
+
+-- 6. Permitir representantes legales de empresas sin DNI obligatorio
+ALTER TABLE contacts ALTER COLUMN numero_documento DROP NOT NULL;
+ALTER TABLE contacts ALTER COLUMN tipo_documento DROP NOT NULL;
+ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_tipo_documento_check;
