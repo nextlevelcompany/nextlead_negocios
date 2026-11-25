@@ -231,9 +231,14 @@ public class DatabaseInitializer implements CommandLineRunner {
             System.out.println(">>> Ubigeo Perú cargado correctamente.");
         }
 
-        // ── Contactos semilla ───────────────────────────────────────────────
-        if (contactDao.count() == 0) {
-            System.out.println(">>> Creando contactos de prueba...");
+        // ── Contactos masivos y semilla ─────────────────────────────────────
+        boolean massLoaded = false;
+        if (contactDao.count() < 100) {
+            massLoaded = seedContactsFromDump();
+        }
+
+        if (!massLoaded && contactDao.count() == 0) {
+            System.out.println(">>> Creando contactos de prueba básicos...");
 
             // Empresa semilla
             Contact empresa = new Contact();
@@ -281,26 +286,26 @@ public class DatabaseInitializer implements CommandLineRunner {
             contactDao.save(persona);
             System.out.println(">>> Persona Natural semilla creada correctamente.");
         }
-
-        // ── Siembra Masiva Automática (52,483 contactos B2B / Experian) ─────
-        seedContactsFromDump();
     }
 
-    private void seedContactsFromDump() {
-        if (contactDao.count() >= 100) {
-            return;
-        }
-
-        System.out.println(">>> Base de datos nueva detectada. Verificando archivo de siembra /data/contacts_data.sql.gz...");
+    private boolean seedContactsFromDump() {
+        System.out.println(">>> Verificando archivo de siembra /data/contacts_data.sql.gz...");
         try (java.io.InputStream is = getClass().getResourceAsStream("/data/contacts_data.sql.gz")) {
             if (is == null) {
                 System.out.println(">>> No se encontró /data/contacts_data.sql.gz en los recursos.");
-                return;
+                return false;
             }
 
             System.out.println(">>> Restaurando catálogo masivo de 52,483 contactos B2B...");
+            // Limpiar contactos residuales de prueba para evitar colisión de clave única
             try {
-                jdbcTemplate.execute("ALTER TABLE contacts DISABLE TRIGGER trg_new_contact_opportunity;");
+                jdbcTemplate.execute("TRUNCATE TABLE direcciones, contacts RESTART IDENTITY CASCADE;");
+            } catch (Exception e) {
+                System.err.println(">>> Nota al limpiar contactos previos: " + e.getMessage());
+            }
+
+            try {
+                jdbcTemplate.execute("DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_new_contact_opportunity') THEN ALTER TABLE contacts DISABLE TRIGGER trg_new_contact_opportunity; END IF; END $$;");
             } catch (Exception ignored) {}
 
             try (java.util.zip.GZIPInputStream gzip = new java.util.zip.GZIPInputStream(is);
@@ -329,14 +334,18 @@ public class DatabaseInitializer implements CommandLineRunner {
                 }
             } finally {
                 try {
-                    jdbcTemplate.execute("ALTER TABLE contacts ENABLE TRIGGER trg_new_contact_opportunity;");
+                    jdbcTemplate.execute("DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_new_contact_opportunity') THEN ALTER TABLE contacts ENABLE TRIGGER trg_new_contact_opportunity; END IF; END $$;");
+                    jdbcTemplate.execute("SELECT setval('contacts_id_seq', COALESCE((SELECT MAX(id) FROM contacts), 1));");
+                    jdbcTemplate.execute("SELECT setval('direcciones_id_seq', COALESCE((SELECT MAX(id) FROM direcciones), 1));");
                 } catch (Exception ignored) {}
             }
 
             long total = contactDao.count();
             System.out.println(">>> ¡Restauración masiva completada exitosamente! Total contactos: " + total);
+            return total > 0;
         } catch (Exception e) {
             System.err.println(">>> Advertencia en siembra masiva de contactos: " + e.getMessage());
+            return false;
         }
     }
 
@@ -427,7 +436,43 @@ public class DatabaseInitializer implements CommandLineRunner {
             "UPDATE productos SET imagen = '/productos/08_plan_600_PLUS_Router.png' WHERE codigo = 'PLAN-600-PLUS-ROUTER' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
             "UPDATE productos SET imagen = '/productos/09_plan_1000_LITE.png' WHERE codigo = 'PLAN-1000-LITE' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
             "UPDATE productos SET imagen = '/productos/10_plan_300_business.png' WHERE codigo = 'PLAN-300-BUSINESS' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
-            "UPDATE productos SET imagen = '/productos/11_plan_400_business_wifi.png' WHERE codigo = 'PLAN-400-BUSINESS-WIFI' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')"
+            "UPDATE productos SET imagen = '/productos/11_plan_400_business_wifi.png' WHERE codigo = 'PLAN-400-BUSINESS-WIFI' AND (imagen IS NULL OR imagen = '' OR imagen LIKE '%localhost%')",
+
+            // Roles y Permisos del Sistema
+            "CREATE TABLE IF NOT EXISTS roles_sistema (" +
+            "    id SERIAL PRIMARY KEY," +
+            "    codigo VARCHAR(50) UNIQUE NOT NULL," +
+            "    nombre VARCHAR(100) NOT NULL," +
+            "    descripcion TEXT," +
+            "    color VARCHAR(20) DEFAULT '#3b82f6'," +
+            "    badge_color VARCHAR(30) DEFAULT 'bg-blue-600'," +
+            "    es_sistema BOOLEAN DEFAULT false," +
+            "    sales_scope VARCHAR(20) DEFAULT 'own'," +
+            "    permisos JSONB DEFAULT '{}'::jsonb," +
+            "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+            ")",
+
+            "INSERT INTO roles_sistema (codigo, nombre, descripcion, color, badge_color, es_sistema, sales_scope, permisos) VALUES " +
+            "('ADMIN', 'Administrador Total', 'Acceso total e irrestricto a todos los módulos comerciales, financieros y administrativos.', '#9333ea', 'bg-purple-600', true, 'all', '{\"ventas\":{\"ver\":true,\"crear\":true,\"editar\":true,\"instalar\":true,\"anular\":true,\"reasignar\":true,\"exportar\":true},\"finanzas\":{\"ver_flujo\":true,\"registrar_movimiento\":true,\"ver_cuentas_bancarias\":true,\"anular_movimiento\":true},\"rentabilidad\":{\"ver_margenes\":true,\"ver_costos\":true,\"simulador\":true,\"configurar_perfiles\":true},\"payroll\":{\"ver_personal\":true,\"gestionar_personal\":true,\"ver_liquidaciones\":true,\"pagar_comisiones\":true},\"clientes\":{\"ver_todos\":true,\"crear\":true,\"chatear_whatsapp\":true,\"exportar\":true},\"admin\":{\"gestionar_usuarios\":true,\"gestionar_roles\":true,\"ajustes_sistema\":true}}'::jsonb), " +
+            "('SUPERVISOR', 'Supervisor de Ventas', 'Supervisión del equipo comercial, validación y pase a instaladas de ventas y comisiones del equipo.', '#2563eb', 'bg-blue-600', true, 'team', '{\"ventas\":{\"ver\":true,\"crear\":true,\"editar\":true,\"instalar\":true,\"anular\":false,\"reasignar\":true,\"exportar\":true},\"finanzas\":{\"ver_flujo\":false,\"registrar_movimiento\":false,\"ver_cuentas_bancarias\":false,\"anular_movimiento\":false},\"rentabilidad\":{\"ver_margenes\":true,\"ver_costos\":false,\"simulador\":true,\"configurar_perfiles\":false},\"payroll\":{\"ver_personal\":true,\"gestionar_personal\":false,\"ver_liquidaciones\":true,\"pagar_comisiones\":false},\"clientes\":{\"ver_todos\":true,\"crear\":true,\"chatear_whatsapp\":true,\"exportar\":false},\"admin\":{\"gestionar_usuarios\":false,\"gestionar_roles\":false,\"ajustes_sistema\":false}}'::jsonb), " +
+            "('VENDEDOR', 'Vendedor / Asesor Comercial', 'Asesor comercial. Únicamente puede consultar sus propias ventas asignadas y dar seguimiento a sus prospectos.', '#059669', 'bg-emerald-600', true, 'own', '{\"ventas\":{\"ver\":true,\"crear\":true,\"editar\":true,\"instalar\":false,\"anular\":false,\"reasignar\":false,\"exportar\":false},\"finanzas\":{\"ver_flujo\":false,\"registrar_movimiento\":false,\"ver_cuentas_bancarias\":false,\"anular_movimiento\":false},\"rentabilidad\":{\"ver_margenes\":false,\"ver_costos\":false,\"simulador\":false,\"configurar_perfiles\":false},\"payroll\":{\"ver_personal\":false,\"gestionar_personal\":false,\"ver_liquidaciones\":false,\"pagar_comisiones\":false},\"clientes\":{\"ver_todos\":false,\"crear\":true,\"chatear_whatsapp\":true,\"exportar\":false},\"admin\":{\"gestionar_usuarios\":false,\"gestionar_roles\":false,\"ajustes_sistema\":false}}'::jsonb), " +
+            "('FINANZAS', 'Finanzas & Tesorería', 'Tesorería y contabilidad. Control de caja chica, bancos (BCP, BBVA), márgenes sin IGV y pago de nóminas.', '#d97706', 'bg-amber-600', true, 'all', '{\"ventas\":{\"ver\":true,\"crear\":false,\"editar\":false,\"instalar\":false,\"anular\":false,\"reasignar\":false,\"exportar\":true},\"finanzas\":{\"ver_flujo\":true,\"registrar_movimiento\":true,\"ver_cuentas_bancarias\":true,\"anular_movimiento\":true},\"rentabilidad\":{\"ver_margenes\":true,\"ver_costos\":true,\"simulador\":true,\"configurar_perfiles\":true},\"payroll\":{\"ver_personal\":true,\"gestionar_personal\":true,\"ver_liquidaciones\":true,\"pagar_comisiones\":true},\"clientes\":{\"ver_todos\":true,\"crear\":false,\"chatear_whatsapp\":false,\"exportar\":false},\"admin\":{\"gestionar_usuarios\":false,\"gestionar_roles\":false,\"ajustes_sistema\":false}}'::jsonb), " +
+            "('OPERACIONES', 'Operaciones & Logística', 'Logística e instalaciones. Verificación técnica de servicios, agendamiento de instalaciones y despacho.', '#0891b2', 'bg-cyan-600', true, 'all', '{\"ventas\":{\"ver\":true,\"crear\":false,\"editar\":false,\"instalar\":true,\"anular\":false,\"reasignar\":false,\"exportar\":false},\"finanzas\":{\"ver_flujo\":false,\"registrar_movimiento\":false,\"ver_cuentas_bancarias\":false,\"anular_movimiento\":false},\"rentabilidad\":{\"ver_margenes\":false,\"ver_costos\":false,\"simulador\":false,\"configurar_perfiles\":false},\"payroll\":{\"ver_personal\":true,\"gestionar_personal\":false,\"ver_liquidaciones\":false,\"pagar_comisiones\":false},\"clientes\":{\"ver_todos\":true,\"crear\":false,\"chatear_whatsapp\":true,\"exportar\":false},\"admin\":{\"gestionar_usuarios\":false,\"gestionar_roles\":false,\"ajustes_sistema\":false}}'::jsonb) " +
+            "ON CONFLICT (codigo) DO NOTHING",
+
+            // Mejoras IA y Shipping Coverage
+            "ALTER TABLE ai_products_config ADD COLUMN IF NOT EXISTS intent VARCHAR(100)",
+            "ALTER TABLE ai_products_config ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 100",
+            "ALTER TABLE ai_products_config ADD COLUMN IF NOT EXISTS media_id_whatsapp VARCHAR(200)",
+            "ALTER TABLE ai_products_config ADD COLUMN IF NOT EXISTS image_caption TEXT",
+
+            "ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS intent VARCHAR(100)",
+            "ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE",
+            "ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 100",
+            "ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS media_id_whatsapp VARCHAR(200)",
+            "ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS media_caption TEXT",
+
+            "ALTER TABLE shipping_coverage ADD COLUMN IF NOT EXISTS aliases TEXT"
         };
 
         for (String sql : migrations) {
