@@ -68,9 +68,7 @@ import {
   Search,
 } from "lucide-react";
 import { toast } from "sonner";
-import api from "@/lib/api";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import api, { getMediaUrl } from "@/lib/api";
 
 interface KnowledgeBaseItem {
   id?: number;
@@ -502,6 +500,7 @@ export default function IntegracionesPage() {
     <div className="flex flex-col gap-6 w-full min-w-0 max-w-full pb-10">
       {/* Hidden File Input for KB Images */}
       <input
+        id="kb_file_input"
         type="file"
         ref={kbFileInputRef}
         onChange={handleUploadKbImage}
@@ -1000,11 +999,7 @@ export default function IntegracionesPage() {
                       filteredKb.map((kb) => {
                         const hasImg = kb.attachmentType === "IMAGE" && kb.attachmentUrl;
                         const hasPdf = kb.attachmentType === "PDF" && kb.attachmentUrl;
-                        const imgUrl = kb.attachmentUrl
-                          ? kb.attachmentUrl.startsWith("http")
-                            ? kb.attachmentUrl
-                            : `${API_BASE}${kb.attachmentUrl.startsWith("/") ? "" : "/"}${kb.attachmentUrl}`
-                          : "";
+                        const imgUrl = getMediaUrl(kb.attachmentUrl);
 
                         return (
                           <TableRow key={kb.id} className="hover:bg-muted/30 transition-colors">
@@ -1168,11 +1163,7 @@ export default function IntegracionesPage() {
                       </TableRow>
                     ) : (
                       filteredProducts.map((prod) => {
-                        const imgUrl = prod.productImage
-                          ? prod.productImage.startsWith("http")
-                            ? prod.productImage
-                            : `${API_BASE}${prod.productImage.startsWith("/") ? "" : "/"}${prod.productImage}`
-                          : "";
+                        const imgUrl = getMediaUrl(prod.productImage);
 
                         return (
                           <TableRow key={prod.productoId} className="hover:bg-muted/30 transition-colors">
@@ -1556,27 +1547,20 @@ export default function IntegracionesPage() {
                   <ImageIcon className="h-4 w-4 text-blue-600" />
                   Imagen o Archivo Adjunto de WhatsApp
                 </Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => kbFileInputRef.current?.click()}
-                  className="h-7 text-xs gap-1"
+                <label
+                  htmlFor="kb_file_input"
+                  className="inline-flex items-center justify-center h-7 px-2.5 text-xs font-medium gap-1 rounded-md border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground cursor-pointer"
                 >
                   <Upload className="h-3 w-3" />
                   Subir Foto
-                </Button>
+                </label>
               </div>
 
               {currentKb.attachmentUrl ? (
                 <div className="flex items-center gap-3 mt-2 p-2 bg-card rounded border">
                   {currentKb.attachmentType === "IMAGE" ? (
                     <img
-                      src={
-                        currentKb.attachmentUrl.startsWith("http")
-                          ? currentKb.attachmentUrl
-                          : `${API_BASE}${currentKb.attachmentUrl.startsWith("/") ? "" : "/"}${currentKb.attachmentUrl}`
-                      }
+                      src={getMediaUrl(currentKb.attachmentUrl)}
                       alt="Preview"
                       className="h-12 w-12 rounded object-cover border"
                     />

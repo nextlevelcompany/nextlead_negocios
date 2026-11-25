@@ -39,9 +39,7 @@ import {
   Brain,
 } from "lucide-react";
 import { toast } from "sonner";
-import api from "@/lib/api";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import api, { getMediaUrl } from "@/lib/api";
 
 interface ConversationItem {
   chat_phone: string;
@@ -137,15 +135,7 @@ function parseMessageContent(text: string) {
   if (!text) return { images, audios, documents, displayText };
 
   const sanitizeMedia = (p: string) => {
-    let clean = p.trim();
-    if (clean.includes("/uploads/")) {
-      return clean.substring(clean.indexOf("/uploads/"));
-    }
-    if (clean.includes("/productos/")) {
-      return clean.substring(clean.indexOf("/productos/"));
-    }
-    if (clean.startsWith("http")) return clean;
-    return `${API_BASE}${clean.startsWith("/") ? "" : "/"}${clean}`;
+    return getMediaUrl(p);
   };
 
   // Format 1: [IMAGE]/uploads/...
@@ -495,6 +485,7 @@ export default function ChatBox() {
     <div className="h-[calc(100vh-170px)] min-h-[520px] max-h-[calc(100vh-170px)] w-full flex bg-card border border-border rounded-xl overflow-hidden shadow-sm">
       {/* Hidden file input */}
       <input
+        id="chatbox_file_input"
         type="file"
         ref={fileInputRef}
         onChange={handleFileUpload}
@@ -935,15 +926,13 @@ export default function ChatBox() {
 
             {/* Chat Input Bar */}
             <div className="shrink-0 p-2.5 px-3 bg-card border-t border-border flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => fileInputRef.current?.click()}
-                className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+              <label
+                htmlFor="chatbox_file_input"
+                className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent shrink-0 cursor-pointer"
                 title="Adjuntar imagen o archivo"
               >
                 <Paperclip className="h-4 w-4" />
-              </Button>
+              </label>
 
               <Input
                 type="text"

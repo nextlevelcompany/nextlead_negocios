@@ -33,7 +33,7 @@ import {
   FileCode,
 } from "lucide-react";
 import { toast } from "sonner";
-import api from "@/lib/api";
+import api, { getMediaUrl } from "@/lib/api";
 
 export default function QuotationConfigPage() {
   const [loading, setLoading] = useState(true);
@@ -203,14 +203,6 @@ export default function QuotationConfigPage() {
   const isPdfMembrete = membreteType === "pdf";
   const isWordMembrete = ["docx", "doc"].includes(membreteType);
 
-  const getMediaUrl = (url?: string) => {
-    if (!url) return "";
-    const clean = cleanMediaUrl(url);
-    if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("data:")) return clean;
-    const base = process.env.NEXT_PUBLIC_API_URL || "";
-    return `${base}${clean.startsWith("/") ? "" : "/"}${clean}`;
-  };
-
   const previewMembreteImg =
     cleanMediaUrl(form["cotizacion.hoja_membrete_imagen_url"]) ||
     (["png", "jpg", "jpeg", "webp"].some((ext) => (form["cotizacion.hoja_membrete_url"] || "").toLowerCase().endsWith(ext))
@@ -278,6 +270,7 @@ export default function QuotationConfigPage() {
               <CardContent className="p-3.5 space-y-2.5">
                 <input
                   ref={fileInputRef}
+                  id="membrete_file_input"
                   type="file"
                   accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp"
                   className="hidden"
@@ -327,16 +320,12 @@ export default function QuotationConfigPage() {
                           Ver / Descargar
                         </a>
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={uploadingMembrete}
-                        onClick={() => fileInputRef.current?.click()}
-                        className="h-7 px-2 text-[11px] gap-1"
+                      <label
+                        htmlFor="membrete_file_input"
+                        className="inline-flex items-center justify-center h-7 px-2 text-[11px] font-medium gap-1 rounded-md border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground cursor-pointer"
                       >
                         Reemplazar
-                      </Button>
+                      </label>
                       <Button
                         type="button"
                         variant="ghost"
@@ -350,15 +339,15 @@ export default function QuotationConfigPage() {
                     </div>
                   </div>
                 ) : (
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
+                  <label
+                    htmlFor="membrete_file_input"
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
                       const f = e.dataTransfer.files?.[0];
                       if (f) handleFileUpload(f);
                     }}
-                    className="border-2 border-dashed border-muted-foreground/30 hover:border-emerald-500 rounded-lg p-4 text-center cursor-pointer transition-colors bg-muted/10 hover:bg-emerald-50/20"
+                    className="block border-2 border-dashed border-muted-foreground/30 hover:border-emerald-500 rounded-lg p-4 text-center cursor-pointer transition-colors bg-muted/10 hover:bg-emerald-50/20"
                   >
                     <UploadCloud className="size-7 mx-auto text-emerald-600 mb-1" />
                     <p className="text-xs font-bold text-foreground">
@@ -367,17 +356,11 @@ export default function QuotationConfigPage() {
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       Formatos soportados: <strong>PDF (.pdf)</strong>, <strong>Word (.docx, .doc)</strong> o <strong>Imágenes (.png, .jpg)</strong>.
                     </p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={uploadingMembrete}
-                      className="mt-2.5 h-7 text-xs font-semibold gap-1.5 border-emerald-600 text-emerald-700"
-                    >
+                    <div className="inline-flex items-center gap-1.5 mt-2.5 h-7 px-3 text-xs font-semibold rounded-md border border-emerald-600 text-emerald-700 bg-background shadow-xs hover:bg-emerald-50/50">
                       {uploadingMembrete ? <RefreshCw className="size-3 animate-spin" /> : <UploadCloud className="size-3" />}
                       {uploadingMembrete ? "Subiendo archivo..." : "Seleccionar Archivo"}
-                    </Button>
-                  </div>
+                    </div>
+                  </label>
                 )}
 
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t">

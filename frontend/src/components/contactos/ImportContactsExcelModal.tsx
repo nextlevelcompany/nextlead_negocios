@@ -75,7 +75,7 @@ export function ImportContactsExcelModal({
     }
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const dropped = e.dataTransfer.files[0];
@@ -184,17 +184,18 @@ export function ImportContactsExcelModal({
               2. Selecciona o arrastra tu archivo Excel
             </label>
 
-            <div
+            <label
+              htmlFor="excel_import_input"
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+              className={`block border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
                 file
                   ? "border-emerald-500/50 bg-emerald-500/5"
                   : "border-border hover:border-primary/50 hover:bg-muted/40"
               }`}
             >
               <input
+                id="excel_import_input"
                 ref={fileInputRef}
                 type="file"
                 accept=".xlsx, .xls"
@@ -223,7 +224,7 @@ export function ImportContactsExcelModal({
                   </p>
                 </div>
               )}
-            </div>
+            </label>
           </div>
 
           {/* Opción de actualización */}

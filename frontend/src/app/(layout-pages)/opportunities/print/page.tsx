@@ -17,7 +17,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
-import api from "@/lib/api";
+import api, { getMediaUrl } from "@/lib/api";
 import { CorporateQuoteTable } from "@/components/opportunities/CorporateQuoteTable";
 
 function PrintQuotationContent() {
@@ -168,14 +168,6 @@ function PrintQuotationContent() {
       clean = clean.substring(clean.indexOf("/productos/"));
     }
     return clean;
-  };
-
-  const getMediaUrl = (url?: string) => {
-    if (!url) return "";
-    const clean = cleanMediaUrl(url);
-    if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("data:")) return clean;
-    const base = process.env.NEXT_PUBLIC_API_URL || "";
-    return `${base}${clean.startsWith("/") ? "" : "/"}${clean}`;
   };
 
   // Resolve Hoja Membrete background image URL
