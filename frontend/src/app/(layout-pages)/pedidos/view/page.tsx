@@ -227,17 +227,33 @@ export default function PedidosViewPage() {
         (p.productos_resumen && p.productos_resumen.toLowerCase().includes(term)) ||
         (p.notas && p.notas.toLowerCase().includes(term));
 
-      const matchZona = filterZona === "all" || String(p.zona) === filterZona;
-      const matchChofer = filterChofer === "all" || String(p.chofer_id) === filterChofer;
-      const matchPago = filterPago === "all" || (p.estado_pago || "").toLowerCase() === filterPago.toLowerCase();
-      const matchEtapa = filterEtapa === "all" || String(p.etapa_id) === filterEtapa;
+      const matchZona =
+        filterZona === "all" ||
+        String(p.zona) === filterZona ||
+        String(p.zona_id) === filterZona ||
+        (p.zona_nombre && p.zona_nombre.toLowerCase() === filterZona.toLowerCase());
+
+      const matchChofer =
+        filterChofer === "all" ||
+        String(p.chofer_id) === filterChofer;
+
+      const matchPago =
+        filterPago === "all" ||
+        (p.estado_pago || "").toLowerCase() === filterPago.toLowerCase();
+
+      const matchEtapa =
+        filterEtapa === "all" ||
+        String(p.etapa_id) === filterEtapa;
+
       const matchPrioridad =
         filterPrioridad === "all" ||
         (p.prioridad || "").toLowerCase() === filterPrioridad.toLowerCase();
 
+      const pDate = p.fecha_entrega ? String(p.fecha_entrega).split("T")[0] : "";
       const matchDate =
         !filterDate ||
-        (p.fecha_entrega && String(p.fecha_entrega).startsWith(filterDate));
+        pDate === filterDate ||
+        pDate.startsWith(filterDate);
 
       return matchTerm && matchZona && matchChofer && matchPago && matchEtapa && matchPrioridad && matchDate;
     });

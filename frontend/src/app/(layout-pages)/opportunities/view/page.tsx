@@ -486,36 +486,66 @@ export default function OpportunitiesKanbanPage() {
       // 1. Filtro por Supervisor
       let matchSupervisor = true;
       if (filterSupervisor !== "all") {
-        matchSupervisor =
-          String(opp.supervisor_id) === filterSupervisor ||
-          opp.supervisor_nombre === filterSupervisor;
+        if (filterSupervisor === "unassigned") {
+          matchSupervisor = opp.supervisor_id == null && (!opp.supervisor_nombre || opp.supervisor_nombre === "Sin Asignar");
+        } else {
+          if (opp.supervisor_id == null && (!opp.supervisor_nombre || opp.supervisor_nombre === "Sin Asignar")) {
+            matchSupervisor = false;
+          } else {
+            const selectedSup = staffList.find((st) => String(st.id) === filterSupervisor);
+            const supFullName = selectedSup ? `${selectedSup.nombre} ${selectedSup.apellido || ""}`.trim().toLowerCase() : "";
+            const oppSupName = (opp.supervisor_nombre || "").trim().toLowerCase();
+
+            matchSupervisor =
+              (opp.supervisor_id != null && String(opp.supervisor_id) === filterSupervisor) ||
+              oppSupName === filterSupervisor.toLowerCase() ||
+              (supFullName !== "" && (oppSupName === supFullName || oppSupName.includes(selectedSup?.nombre?.toLowerCase() || "")));
+          }
+        }
       }
 
       // 2. Filtro por Modalidad / Perfil (ejecutivo, freelance, supervisor)
       let matchPerfil = true;
       if (filterPerfil !== "all") {
-        const p = (opp.vendedor_perfil || "").toLowerCase();
-        if (filterPerfil === "freelance") {
-          matchPerfil = p.includes("freelance");
-        } else if (filterPerfil === "supervisor") {
-          matchPerfil = p.includes("supervisor");
-        } else if (filterPerfil === "ejecutivo") {
-          matchPerfil = !p.includes("freelance") && !p.includes("supervisor");
+        const hasWorker = opp.trabajador_id != null || (opp.vendedor_nombre && opp.vendedor_nombre !== "Sin Asignar");
+        if (!hasWorker) {
+          matchPerfil = false;
+        } else {
+          const p = (opp.vendedor_perfil || "").toLowerCase();
+          if (filterPerfil === "freelance") {
+            matchPerfil = p.includes("freelance");
+          } else if (filterPerfil === "supervisor") {
+            matchPerfil = p.includes("supervisor");
+          } else if (filterPerfil === "ejecutivo") {
+            matchPerfil = !p.includes("freelance") && !p.includes("supervisor");
+          }
         }
       }
 
       // 3. Filtro por Ejecutivo / Vendedor específico
       let matchVendedor = true;
       if (filterVendedor !== "all") {
-        matchVendedor =
-          String(opp.trabajador_id) === filterVendedor ||
-          opp.vendedor_nombre === filterVendedor ||
-          String(opp.usuario_id) === filterVendedor;
+        if (filterVendedor === "unassigned") {
+          matchVendedor = opp.trabajador_id == null && (!opp.vendedor_nombre || opp.vendedor_nombre === "Sin Asignar");
+        } else {
+          if (opp.trabajador_id == null && (!opp.vendedor_nombre || opp.vendedor_nombre === "Sin Asignar")) {
+            matchVendedor = false;
+          } else {
+            const selectedWorker = staffList.find((st) => String(st.id) === filterVendedor);
+            const workerFullName = selectedWorker ? `${selectedWorker.nombre} ${selectedWorker.apellido || ""}`.trim().toLowerCase() : "";
+            const oppVenName = (opp.vendedor_nombre || "").trim().toLowerCase();
+
+            matchVendedor =
+              (opp.trabajador_id != null && String(opp.trabajador_id) === filterVendedor) ||
+              oppVenName === filterVendedor.toLowerCase() ||
+              (workerFullName !== "" && (oppVenName === workerFullName || (selectedWorker?.nombre && oppVenName.includes(selectedWorker.nombre.toLowerCase()))));
+          }
+        }
       }
 
       return matchSearch && matchPriority && matchTag && matchDate && matchSupervisor && matchPerfil && matchVendedor;
     });
-  }, [opportunities, searchTerm, filterPriority, filterTag, filterDate, filterSupervisor, filterPerfil, filterVendedor]);
+  }, [opportunities, staffList, searchTerm, filterPriority, filterTag, filterDate, filterSupervisor, filterPerfil, filterVendedor]);
 
   const paginatedOpps = useMemo(() => {
     const start = (listPage - 1) * listPageSize;
@@ -1173,6 +1203,7 @@ export default function OpportunitiesKanbanPage() {
                     onChange={(e) => setFilterVendedor(e.target.value)}
                   >
                     <option value="all">Todos los Asesores</option>
+                    <option value="unassigned">Sin Asignar (Pendientes)</option>
                     {visibleVendedores.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.label} {v.perfil ? `(${v.perfil})` : ""}
@@ -1297,6 +1328,7 @@ export default function OpportunitiesKanbanPage() {
                     title="Filtrar por Ejecutivo / Asesor comercial"
                   >
                     <option value="all">Asesor: Todos</option>
+                    <option value="unassigned">Sin Asignar (Pendientes)</option>
                     {visibleVendedores.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.label} {v.perfil ? `(${v.perfil})` : ""}

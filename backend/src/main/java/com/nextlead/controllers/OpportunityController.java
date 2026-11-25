@@ -127,9 +127,9 @@ public class OpportunityController {
                 "       c.tipo_persona as contacto_tipo_persona, c.numero_documento, c.telefono_principal as telefono_movil, c.email as contacto_email, " +
                 "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as contacto_nombre_completo, " +
                 "       COALESCE(o.trabajador_id, t.id) as trabajador_id, " +
-                "       COALESCE(TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))), NULLIF(o.firma_nombre, ''), CONCAT(u.first_name, ' ', u.last_name)) as vendedor_nombre, " +
+                "       COALESCE(TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))), NULLIF(o.firma_nombre, '')) as vendedor_nombre, " +
                 "       rp.id as vendedor_perfil_id, " +
-                "       COALESCE(rp.nombre, t.rol_operativo, 'Ejecutivo') as vendedor_perfil, " +
+                "       CASE WHEN (t.id IS NOT NULL OR o.trabajador_id IS NOT NULL OR NULLIF(o.firma_nombre, '') IS NOT NULL) THEN COALESCE(rp.nombre, t.rol_operativo, 'Ejecutivo') ELSE NULL END as vendedor_perfil, " +
                 "       COALESCE(o.supervisor_id, t.supervisor_id) as supervisor_id, " +
                 "       TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre, " +
                 "       COALESCE(t.equipo, 'Equipo Principal') as equipo_nombre " +
@@ -341,9 +341,9 @@ public class OpportunityController {
                 "       c.razon_social, c.nombres, c.apellidos, " +
                 "       COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos)) as contacto_nombre_completo, " +
                 "       COALESCE(o.trabajador_id, t.id) as trabajador_id, " +
-                "       COALESCE(TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))), NULLIF(o.firma_nombre, ''), CONCAT(u.first_name, ' ', u.last_name)) as vendedor_nombre, " +
+                "       COALESCE(TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))), NULLIF(o.firma_nombre, '')) as vendedor_nombre, " +
                 "       rp.id as vendedor_perfil_id, " +
-                "       COALESCE(rp.nombre, t.rol_operativo, 'Ejecutivo') as vendedor_perfil, " +
+                "       CASE WHEN (t.id IS NOT NULL OR o.trabajador_id IS NOT NULL OR NULLIF(o.firma_nombre, '') IS NOT NULL) THEN COALESCE(rp.nombre, t.rol_operativo, 'Ejecutivo') ELSE NULL END as vendedor_perfil, " +
                 "       COALESCE(o.supervisor_id, t.supervisor_id) as supervisor_id, " +
                 "       TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre, " +
                 "       k.nombre as etapa_nombre " +

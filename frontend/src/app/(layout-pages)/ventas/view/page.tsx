@@ -950,18 +950,38 @@ export default function SalesViewPage() {
 
       // 7. Filtro por Vendedor
       if (filterVendedor !== "all") {
-        const matchesVendedor =
-          String(s.trabajador_id) === filterVendedor ||
-          s.vendedor_nombre === filterVendedor;
-        if (!matchesVendedor) return false;
+        if (filterVendedor === "unassigned") {
+          if (s.trabajador_id != null || (s.vendedor_nombre && s.vendedor_nombre !== "Sin Asignar")) return false;
+        } else {
+          if (s.trabajador_id == null && (!s.vendedor_nombre || s.vendedor_nombre === "Sin Asignar")) return false;
+          const selectedWorker = staffList?.find((st: any) => String(st.id) === filterVendedor);
+          const workerFullName = selectedWorker ? `${selectedWorker.nombre} ${selectedWorker.apellido || ""}`.trim().toLowerCase() : "";
+          const saleVenName = (s.vendedor_nombre || "").trim().toLowerCase();
+
+          const matchesVendedor =
+            (s.trabajador_id != null && String(s.trabajador_id) === filterVendedor) ||
+            (saleVenName !== "" && saleVenName === filterVendedor.toLowerCase()) ||
+            (workerFullName !== "" && (saleVenName === workerFullName || (selectedWorker?.nombre && saleVenName.includes(selectedWorker.nombre.toLowerCase()))));
+          if (!matchesVendedor) return false;
+        }
       }
 
       // 8. Filtro por Supervisor
       if (filterSupervisor !== "all") {
-        const matchesSupervisor =
-          String(s.supervisor_id) === filterSupervisor ||
-          s.supervisor_nombre === filterSupervisor;
-        if (!matchesSupervisor) return false;
+        if (filterSupervisor === "unassigned") {
+          if (s.supervisor_id != null || (s.supervisor_nombre && s.supervisor_nombre !== "Sin Asignar")) return false;
+        } else {
+          if (s.supervisor_id == null && (!s.supervisor_nombre || s.supervisor_nombre === "Sin Asignar")) return false;
+          const selectedSup = staffList?.find((st: any) => String(st.id) === filterSupervisor);
+          const supFullName = selectedSup ? `${selectedSup.nombre} ${selectedSup.apellido || ""}`.trim().toLowerCase() : "";
+          const saleSupName = (s.supervisor_nombre || "").trim().toLowerCase();
+
+          const matchesSupervisor =
+            (s.supervisor_id != null && String(s.supervisor_id) === filterSupervisor) ||
+            (saleSupName !== "" && saleSupName === filterSupervisor.toLowerCase()) ||
+            (supFullName !== "" && (saleSupName === supFullName || (selectedSup?.nombre && saleSupName.includes(selectedSup.nombre.toLowerCase()))));
+          if (!matchesSupervisor) return false;
+        }
       }
 
       // 9. Filtro por Equipo
@@ -972,7 +992,7 @@ export default function SalesViewPage() {
 
       return matchSearch && matchDesde && matchHasta && matchPago && matchEstado && matchMetodo && matchComp;
     });
-  }, [sales, searchTerm, filterDesde, filterHasta, filterPago, filterEstado, filterMetodo, filterComprobante, filterVendedor, filterSupervisor, filterEquipo]);
+  }, [sales, staffList, searchTerm, filterDesde, filterHasta, filterPago, filterEstado, filterMetodo, filterComprobante, filterVendedor, filterSupervisor, filterEquipo]);
 
   const paginatedSales = useMemo(() => {
     const start = (salesPage - 1) * salesPageSize;
