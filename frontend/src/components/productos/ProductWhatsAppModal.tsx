@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,15 +18,14 @@ import {
   Copy,
   Check,
   Send,
-  ExternalLink,
   Package,
   Sparkles,
   Phone,
   Image as ImageIcon,
   Download,
-  Share2,
   Info,
-  CheckCircle2,
+  RotateCcw,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Producto } from "@/app/(layout-pages)/productos/view/page";
@@ -61,7 +60,6 @@ async function getImagePngBlob(imageSrc: string): Promise<Blob | null> {
         }, "image/png");
       } catch (err) {
         console.warn("Canvas toBlob error:", err);
-        // Fallback: fetch directo
         fetch(imageSrc)
           .then((r) => r.blob())
           .then(resolve)
@@ -78,12 +76,87 @@ async function getImagePngBlob(imageSrc: string): Promise<Blob | null> {
   });
 }
 
+/**
+ * Genera la plantilla comercial formateada con la estructura exacta requerida por ventas.
+ */
+function generateCommercialTemplate(product: Producto, resolvedImageUrl: string | null): string {
+  const precioVenta = Number(product.precioVenta || 0);
+  const precioSinIgv = precioVenta > 0 ? (precioVenta / 1.18).toFixed(2) : "0.00";
+
+  // Determinar velocidad
+  let velocidadStr = "200 Mbps (100% Fibra Óptica Simétrica GPON)";
+  if (product.velocidadMbps) {
+    velocidadStr = `${product.velocidadMbps} Mbps (100% Fibra Óptica Simétrica GPON)`;
+  } else if (product.nombre) {
+    const match = product.nombre.match(/\b(\d{2,4})\b/);
+    if (match) {
+      velocidadStr = `${match[1]} Mbps (100% Fibra Óptica Simétrica GPON)`;
+    }
+  }
+
+  // Determinar condiciones
+  const condiciones: string[] = [];
+  if (product.esMultisede || product.nombre?.toLowerCase().includes("lite") || product.codigo?.toLowerCase().includes("lite")) {
+    condiciones.push("Exclusivo para Multisedes (mínimo 2 sedes)");
+  }
+  if (product.provinciasExcluidas) {
+    condiciones.push(`No disponible en ${product.provinciasExcluidas}`);
+  } else if (product.nombre?.toLowerCase().includes("lite") || product.codigo?.toLowerCase().includes("lite")) {
+    condiciones.push("No disponible en Arequipa, Chiclayo ni Piura");
+  }
+  if (product.requiereRuc20) {
+    condiciones.push("Exclusivo para empresas con RUC 20");
+  }
+  if (condiciones.length === 0) {
+    condiciones.push("Sujeto a evaluación de factibilidad técnica");
+    condiciones.push("Contrato corporativo con soporte empresarial");
+  }
+
+  // URL pública para ficha técnica
+  const fullImageUrl = resolvedImageUrl
+    ? resolvedImageUrl.startsWith("data:")
+      ? "" // no incluir data URLs extensas
+      : resolvedImageUrl
+    : "";
+
+  return [
+    `🚀 *${(product.nombre || "PRODUCTO").toUpperCase()}*`,
+    `${product.categoriaNombre || "Planes Internet"}${product.codigo ? ` | Código: ${product.codigo}` : ""}`,
+    "",
+    `📋 *Características del Servicio*`,
+    `• Velocidad: ${velocidadStr}`,
+    `• Garantía: 70% garantizado`,
+    `• IP: IP Pública Fija incluida`,
+    `• Soporte: Asistencia y monitoreo empresarial 24/7`,
+    "",
+    `⚡ *Beneficios Clave*`,
+    `• Fibra óptica simétrica corporativa de alta disponibilidad`,
+    `• Soporte técnico dedicado para empresas`,
+    "",
+    `💰 *Tarifa Comercial*`,
+    `• S/ ${precioVenta.toFixed(2)} (inc. IGV)`,
+    `• Base imponible: S/ ${precioSinIgv} (sin IGV)`,
+    "",
+    `⚠️ *Condiciones*`,
+    condiciones.map((c) => `• ${c}`).join("\n"),
+    "",
+    fullImageUrl ? `📸 *Ficha Técnica:*\n${fullImageUrl}\n` : "",
+    `📲 _¿Deseas contratar o cotizar para tu empresa? Responde a este mensaje para ayudarte._`,
+  ]
+    .filter((line, idx, arr) => {
+      if (line === "" && arr[idx - 1] === "") return false;
+      return true;
+    })
+    .join("\n");
+}
+
 export function ProductWhatsAppModal({
   open,
   onOpenChange,
   product,
 }: ProductWhatsAppModalProps) {
   const [recipientPhone, setRecipientPhone] = useState("");
+  const [editableMessage, setEditableMessage] = useState("");
   const [copiedText, setCopiedText] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -104,49 +177,27 @@ export function ProductWhatsAppModal({
     return null;
   }, [product]);
 
-  // Formato enriquecido con iconos y emojis de WhatsApp
-  const whatsappMessage = useMemo(() => {
-    if (!product) return "";
-
-    const fullImageUrl = resolvedImageUrl
-      ? resolvedImageUrl.startsWith("data:")
-        ? "" // data URLs son demasiado largas para el texto de WhatsApp
-        : resolvedImageUrl
-      : "";
-
-    const precioVenta = Number(product.precioVenta || 0);
-    const precioSinIgv = precioVenta > 0 ? (precioVenta / 1.18).toFixed(2) : "0.00";
-
-    const lines: string[] = [
-      `🚀 *${(product.nombre || "PRODUCTO").toUpperCase()}*`,
-      product.codigo ? `🔖 *Código / Plan:* \`${product.codigo}\`` : "",
-      product.categoriaNombre ? `🏷️ *Categoría:* ${product.categoriaNombre}` : "",
-      "",
-      product.descripcion ? `📋 *Detalle del Servicio / Producto:*\n${product.descripcion.trim()}\n` : "",
-      `💰 *Tarifa Comercial:*`,
-      `• *S/ ${precioVenta.toFixed(2)} inc. IGV*`,
-      `• Base Imponible: _S/ ${precioSinIgv} sin IGV_`,
-      "",
-      `⚡ *Beneficios Clave:*`,
-      `• Fibra óptica simétrica corporativa y alta disponibilidad`,
-      `• Soporte y monitoreo empresarial dedicado`,
-      "",
-      fullImageUrl ? `📸 *Ficha Técnica / Imagen:*\n${fullImageUrl}\n` : "",
-      `📲 _¿Deseas contratar o cotizar para tu empresa? ¡Responde a este mensaje para ayudarte!_`,
-    ];
-
-    return lines.filter((l, idx, arr) => {
-      if (l === "" && arr[idx - 1] === "") return false;
-      return true;
-    }).join("\n");
-  }, [product, resolvedImageUrl]);
+  // Al abrir el modal o cambiar el producto, inicializar el mensaje editable con la plantilla
+  useEffect(() => {
+    if (product && open) {
+      setEditableMessage(generateCommercialTemplate(product, resolvedImageUrl));
+    }
+  }, [product, open, resolvedImageUrl]);
 
   if (!product) return null;
 
-  // 1. Copiar texto formateado
+  // Restaurar mensaje original
+  const handleResetTemplate = () => {
+    if (product) {
+      setEditableMessage(generateCommercialTemplate(product, resolvedImageUrl));
+      toast.info("Mensaje restablecido a la plantilla original.");
+    }
+  };
+
+  // 1. Copiar texto editado
   const handleCopyText = async () => {
     try {
-      await navigator.clipboard.writeText(whatsappMessage);
+      await navigator.clipboard.writeText(editableMessage);
       setCopiedText(true);
       toast.success("¡Texto de WhatsApp copiado al portapapeles!");
       setTimeout(() => setCopiedText(false), 2500);
@@ -184,7 +235,7 @@ export function ProductWhatsAppModal({
     } catch (err: any) {
       toast.dismiss("copy-img");
       console.warn("Clipboard image write error:", err);
-      toast.error("Tu navegador no permitió copiar la imagen. Usa el botón 'Descargar Imagen' o 'Compartir'.");
+      toast.error("Tu navegador no permitió copiar la imagen. Usa el botón 'Descargar' o 'Enviar Ficha'.");
     }
   };
 
@@ -211,7 +262,7 @@ export function ProductWhatsAppModal({
     }
   };
 
-  // 4. Compartir Ficha Completa con Imagen (Web Share API nativa si existe, o WhatsApp Web con Copiar Imagen)
+  // 4. Compartir Ficha Completa con Imagen y Texto Editado
   const handleShareWithImage = async () => {
     setSharing(true);
 
@@ -234,7 +285,7 @@ export function ProductWhatsAppModal({
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
               title: product.nombre,
-              text: whatsappMessage,
+              text: editableMessage,
               files: [file],
             });
             toast.success("¡Ficha e imagen compartidas con éxito!");
@@ -244,7 +295,6 @@ export function ProductWhatsAppModal({
         }
       } catch (err: any) {
         if (err.name === "AbortError") {
-          // El usuario canceló el diálogo nativo de compartir
           setSharing(false);
           return;
         }
@@ -272,8 +322,8 @@ export function ProductWhatsAppModal({
       }
     }
 
-    // 2. Abrimos WhatsApp con el texto preparado
-    const encoded = encodeURIComponent(whatsappMessage);
+    // 2. Abrimos WhatsApp con el texto editable preparado
+    const encoded = encodeURIComponent(editableMessage);
     const url = cleanPhone
       ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
       : `https://api.whatsapp.com/send?text=${encoded}`;
@@ -299,7 +349,7 @@ export function ProductWhatsAppModal({
                 </Badge>
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                Envía o copia la ficha con imagen real del producto y mensaje detallado listo para el cliente.
+                Edita o envía la propuesta comercial formateada con imagen y detalles para el cliente.
               </DialogDescription>
             </div>
           </div>
@@ -413,27 +463,45 @@ export function ProductWhatsAppModal({
             </p>
           </div>
 
-          {/* Preview del Mensaje Formateado */}
+          {/* Editor del Mensaje Formateado (Editable por el asesor) */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-semibold flex items-center gap-1.5">
-                <Sparkles className="size-3 text-emerald-600" />
-                Mensaje formateado con iconos para WhatsApp:
+                <Pencil className="size-3 text-emerald-600" />
+                Mensaje para WhatsApp (Puedes editarlo libremente):
               </Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCopyText}
-                className="h-6 text-[11px] gap-1 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-              >
-                {copiedText ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
-                <span>{copiedText ? "Copiado" : "Copiar Texto"}</span>
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetTemplate}
+                  className="h-6 text-[10px] gap-1 px-1.5 text-muted-foreground hover:text-foreground"
+                  title="Restaurar formato original"
+                >
+                  <RotateCcw className="size-2.5" />
+                  <span>Restaurar</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyText}
+                  className="h-6 text-[11px] gap-1 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                >
+                  {copiedText ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                  <span>{copiedText ? "Copiado" : "Copiar Texto"}</span>
+                </Button>
+              </div>
             </div>
 
-            <div className="rounded-lg border bg-zinc-950 text-zinc-100 p-3 font-mono text-[11px] leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap select-text selection:bg-emerald-600 selection:text-white">
-              {whatsappMessage}
-            </div>
+            <textarea
+              value={editableMessage}
+              onChange={(e) => setEditableMessage(e.target.value)}
+              rows={13}
+              className="w-full rounded-lg border border-border bg-zinc-950 text-zinc-100 p-3 font-mono text-[11px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500 selection:bg-emerald-600 selection:text-white resize-y"
+              placeholder="Escribe o personaliza el mensaje antes de enviarlo..."
+            />
           </div>
         </div>
 
