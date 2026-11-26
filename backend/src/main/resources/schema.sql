@@ -1015,3 +1015,20 @@ ALTER TABLE shipping_coverage ADD COLUMN IF NOT EXISTS aliases TEXT;
 ALTER TABLE contacts ALTER COLUMN numero_documento DROP NOT NULL;
 ALTER TABLE contacts ALTER COLUMN tipo_documento DROP NOT NULL;
 ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_tipo_documento_check;
+
+-- Tabla de Registro de Descuentos para Comisiones y Personal
+CREATE TABLE IF NOT EXISTS trabajadores_descuentos (
+    id BIGSERIAL PRIMARY KEY,
+    trabajador_id BIGINT NOT NULL REFERENCES trabajadores(id) ON DELETE CASCADE,
+    periodo_mes INT NOT NULL,
+    periodo_anio INT NOT NULL,
+    fecha DATE DEFAULT CURRENT_DATE,
+    tipo VARCHAR(50) NOT NULL,
+    monto NUMERIC(12, 2) NOT NULL CHECK (monto > 0),
+    motivo TEXT NOT NULL,
+    estado VARCHAR(30) DEFAULT 'Pendiente',
+    registrado_por VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_desc_trab_periodo ON trabajadores_descuentos (trabajador_id, periodo_anio, periodo_mes);
+

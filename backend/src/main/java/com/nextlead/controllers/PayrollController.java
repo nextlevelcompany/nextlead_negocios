@@ -203,12 +203,13 @@ public class PayrollController {
     }
 
     // ==========================================
-    // 2.1. COMISIONES DE PERSONAL (TELECOM / DEALER)
+    // 2.1. COMISIONES DE PERSONAL (TELECOM / DEALER / ROLES)
     // ==========================================
     @GetMapping("/commissions")
     public ResponseEntity<?> getPayrollCommissions(
         @RequestParam(required = false) Integer mes,
-        @RequestParam(required = false) Integer anio
+        @RequestParam(required = false) Integer anio,
+        @RequestParam(required = false) String rol
     ) {
         try {
             LocalDate now = LocalDate.now();
@@ -225,14 +226,19 @@ public class PayrollController {
                 if (arpuVal != null) arpu = Double.parseDouble(arpuVal);
             } catch (Exception ignored) {}
 
-            // Load active workers who have paga_comision = true or commission profile
-            List<Map<String, Object>> workers = jdbcTemplate.queryForList(
-                "SELECT t.*, p.nombre as perfil_nombre " +
-                "FROM trabajadores t " +
-                "LEFT JOIN rentabilidad_perfiles p ON t.perfil_comision_id = p.id " +
-                "WHERE t.estado = 'Activo' AND (t.paga_comision = true OR t.perfil_comision_id IS NOT NULL) " +
-                "ORDER BY t.nombre ASC"
-            );
+            // Load active workers (optional filter by role)
+            String workersSql = "SELECT t.*, p.nombre as perfil_nombre " +
+                                "FROM trabajadores t " +
+                                "LEFT JOIN rentabilidad_perfiles p ON t.perfil_comision_id = p.id " +
+                                "WHERE t.estado = 'Activo'";
+            List<Map<String, Object>> workers;
+            if (rol != null && !rol.trim().isEmpty() && !"all".equalsIgnoreCase(rol)) {
+                workersSql += " AND (LOWER(t.rol_operativo) = LOWER(?) OR LOWER(COALESCE(p.nombre, '')) = LOWER(?)) ORDER BY t.nombre ASC";
+                workers = jdbcTemplate.queryForList(workersSql, rol, rol);
+            } else {
+                workersSql += " ORDER BY t.nombre ASC";
+                workers = jdbcTemplate.queryForList(workersSql);
+            }
 
             // Fetch real installed sales count per user if linked
             List<Map<String, Object>> salesByUserList = jdbcTemplate.queryForList(
@@ -262,67 +268,101 @@ public class PayrollController {
             int teamAltasTotal = 0;
             List<Map<String, Object>> calculated = new ArrayList<>();
 
+            // Helper to get discounts for worker in period
             // 1. First pass for non-supervisors
             for (Map<String, Object> w : workers) {
-                String rol = (String) w.get("rol_operativo");
+                String rolOp = (String) w.get("rol_operativo");
                 String perfil = (String) w.get("perfil_nombre");
-                boolean isSupervisor = "Supervisor".equalsIgnoreCase(rol) || "Supervisor".equalsIgnoreCase(perfil);
+                boolean isSupervisor = "Supervisor".equalsIgnoreCase(rolOp) || "Supervisor".equalsIgnoreCase(perfil);
                 if (isSupervisor) continue;
 
                 Long id = ((Number) w.get("id")).longValue();
-                Integer perfId = w.get("perfil_comision_id") != null ? ((Number) w.get("perfil_comision_id")).intValue() : 1;
-                double sueldoBase = ((Number) w.get("sueldo_base")).doubleValue();
-                double gastos = w.get("gastos_adicionales") != null ? ((Number) w.get("gastos_adicionales")).doubleValue() : 50.0;
+                Integer perfId = w.get("perfil_comision_id") != null ? ((Number) w.get("perfil_comision_id")).intValue() : null;
+                double sueldoBase = w.get("sueldo_base") != null ? ((Number) w.get("sueldo_base")).doubleValue() : 0.0;
+                double gastos = w.get("gastos_adicionales") != null ? ((Number) w.get("gastos_adicionales")).doubleValue() : 0.0;
 
                 Integer userAltas = w.get("usuario_id") != null ? salesByUser.get(((Number) w.get("usuario_id")).intValue()) : null;
                 int altas = userAltas != null ? userAltas : 0;
-                if (altas == 0 && totalVentasReales > 0) {
+                if (altas == 0 && totalVentasReales > 0 && perfId != null) {
                     altas = Math.max(1, totalVentasReales / Math.max(1, workers.size() - 1));
                 }
                 teamAltasTotal += altas;
 
-                // Scale lookup
-                List<Map<String, Object>> escalas = jdbcTemplate.queryForList(
-                    "SELECT * FROM rentabilidad_escalas_comisiones WHERE perfil_id = ? AND ventas_minimas <= ? " +
-                    "ORDER BY ventas_minimas DESC LIMIT 1",
-                    perfId, altas
-                );
+                // Scale lookup if profile exists
                 double factor = 0.0;
                 double bono = 0.0;
                 String rangoNombre = "Sin Escala";
-                if (!escalas.isEmpty()) {
-                    Map<String, Object> esc = escalas.get(0);
-                    factor = ((Number) esc.get("factor_comision")).doubleValue();
-                    bono = ((Number) esc.get("bono_fijo")).doubleValue();
-                    rangoNombre = (String) esc.get("rango_nombre");
+                if (perfId != null) {
+                    List<Map<String, Object>> escalas = jdbcTemplate.queryForList(
+                        "SELECT * FROM rentabilidad_escalas_comisiones WHERE perfil_id = ? AND ventas_minimas <= ? " +
+                        "ORDER BY ventas_minimas DESC LIMIT 1",
+                        perfId, altas
+                    );
+                    if (!escalas.isEmpty()) {
+                        Map<String, Object> esc = escalas.get(0);
+                        factor = ((Number) esc.get("factor_comision")).doubleValue();
+                        bono = ((Number) esc.get("bono_fijo")).doubleValue();
+                        rangoNombre = (String) esc.get("rango_nombre");
+                    }
                 }
 
-                double comisionMonto = altas * arpu * factor;
-                double totalPagar = sueldoBase + comisionMonto + bono;
+                // Delivery driver commission check
+                double comisionMonto = 0.0;
+                if ("Repartidor".equalsIgnoreCase(rolOp)) {
+                    double comisionBidon = w.get("monto_comision_bidon") != null ? ((Number) w.get("monto_comision_bidon")).doubleValue() : 0.0;
+                    comisionMonto = altas * comisionBidon;
+                    if (factor == 0 && comisionBidon > 0) {
+                        rangoNombre = "S/ " + String.format("%.2f", comisionBidon) + " por entrega";
+                    }
+                } else {
+                    comisionMonto = altas * arpu * factor;
+                }
+
+                // Fetch discounts for this worker and period
+                List<Map<String, Object>> discounts = jdbcTemplate.queryForList(
+                    "SELECT id, tipo, monto, motivo, fecha, estado, registrado_por, created_at " +
+                    "FROM trabajadores_descuentos " +
+                    "WHERE trabajador_id = ? AND periodo_mes = ? AND periodo_anio = ? AND estado != 'Anulado' " +
+                    "ORDER BY fecha DESC, id DESC",
+                    id, currentMes, currentAnio
+                );
+                double totalDescuentos = 0.0;
+                for (Map<String, Object> d : discounts) {
+                    if (d.get("monto") != null) {
+                        totalDescuentos += ((Number) d.get("monto")).doubleValue();
+                    }
+                }
+
+                double totalBruto = sueldoBase + comisionMonto + bono;
+                double totalPagar = Math.max(0.0, totalBruto - totalDescuentos);
 
                 Map<String, Object> row = new HashMap<>(w);
-                row.put("nombre_completo", w.get("nombre") + " " + w.get("apellido"));
+                row.put("nombre_completo", (w.get("nombre") + " " + (w.get("apellido") != null ? w.get("apellido") : "")).trim());
                 row.put("altas", altas);
                 row.put("arpu", arpu);
                 row.put("factor_comision", factor);
                 row.put("rango_nombre", rangoNombre);
                 row.put("comision_monto", Math.round(comisionMonto * 100.0) / 100.0);
-                row.put("bono_individual", bono);
+                row.put("bono_individual", Math.round(bono * 100.0) / 100.0);
+                row.put("total_descuentos", Math.round(totalDescuentos * 100.0) / 100.0);
+                row.put("descuentos_detalle", discounts);
                 row.put("gastos_adicionales", gastos);
+                row.put("total_bruto", Math.round(totalBruto * 100.0) / 100.0);
                 row.put("total_a_pagar", Math.round(totalPagar * 100.0) / 100.0);
                 calculated.add(row);
             }
 
             // 2. Second pass for supervisors
             for (Map<String, Object> w : workers) {
-                String rol = (String) w.get("rol_operativo");
+                String rolOp = (String) w.get("rol_operativo");
                 String perfil = (String) w.get("perfil_nombre");
-                boolean isSupervisor = "Supervisor".equalsIgnoreCase(rol) || "Supervisor".equalsIgnoreCase(perfil);
+                boolean isSupervisor = "Supervisor".equalsIgnoreCase(rolOp) || "Supervisor".equalsIgnoreCase(perfil);
                 if (!isSupervisor) continue;
 
+                Long id = ((Number) w.get("id")).longValue();
                 Integer perfId = w.get("perfil_comision_id") != null ? ((Number) w.get("perfil_comision_id")).intValue() : 4;
-                double sueldoBase = ((Number) w.get("sueldo_base")).doubleValue();
-                double gastos = w.get("gastos_adicionales") != null ? ((Number) w.get("gastos_adicionales")).doubleValue() : 50.0;
+                double sueldoBase = w.get("sueldo_base") != null ? ((Number) w.get("sueldo_base")).doubleValue() : 0.0;
+                double gastos = w.get("gastos_adicionales") != null ? ((Number) w.get("gastos_adicionales")).doubleValue() : 0.0;
 
                 int supervisorAltas = teamAltasTotal;
 
@@ -342,17 +382,37 @@ public class PayrollController {
                 }
 
                 double comisionMonto = supervisorAltas * arpu * factor;
-                double totalPagar = sueldoBase + comisionMonto + bono;
+
+                // Fetch discounts for this supervisor and period
+                List<Map<String, Object>> discounts = jdbcTemplate.queryForList(
+                    "SELECT id, tipo, monto, motivo, fecha, estado, registrado_por, created_at " +
+                    "FROM trabajadores_descuentos " +
+                    "WHERE trabajador_id = ? AND periodo_mes = ? AND periodo_anio = ? AND estado != 'Anulado' " +
+                    "ORDER BY fecha DESC, id DESC",
+                    id, currentMes, currentAnio
+                );
+                double totalDescuentos = 0.0;
+                for (Map<String, Object> d : discounts) {
+                    if (d.get("monto") != null) {
+                        totalDescuentos += ((Number) d.get("monto")).doubleValue();
+                    }
+                }
+
+                double totalBruto = sueldoBase + comisionMonto + bono;
+                double totalPagar = Math.max(0.0, totalBruto - totalDescuentos);
 
                 Map<String, Object> row = new HashMap<>(w);
-                row.put("nombre_completo", w.get("nombre") + " " + w.get("apellido"));
+                row.put("nombre_completo", (w.get("nombre") + " " + (w.get("apellido") != null ? w.get("apellido") : "")).trim());
                 row.put("altas", supervisorAltas);
                 row.put("arpu", arpu);
                 row.put("factor_comision", factor);
                 row.put("rango_nombre", rangoNombre);
                 row.put("comision_monto", Math.round(comisionMonto * 100.0) / 100.0);
-                row.put("bono_individual", bono);
+                row.put("bono_individual", Math.round(bono * 100.0) / 100.0);
+                row.put("total_descuentos", Math.round(totalDescuentos * 100.0) / 100.0);
+                row.put("descuentos_detalle", discounts);
                 row.put("gastos_adicionales", gastos);
+                row.put("total_bruto", Math.round(totalBruto * 100.0) / 100.0);
                 row.put("total_a_pagar", Math.round(totalPagar * 100.0) / 100.0);
                 calculated.add(row);
             }
@@ -361,11 +421,13 @@ public class PayrollController {
             double sumComisiones = 0;
             double sumBonos = 0;
             double sumSueldos = 0;
+            double sumDescuentos = 0;
             double sumTotalPagar = 0;
             for (Map<String, Object> c : calculated) {
                 sumComisiones += ((Number) c.get("comision_monto")).doubleValue();
                 sumBonos += ((Number) c.get("bono_individual")).doubleValue();
                 sumSueldos += ((Number) c.get("sueldo_base")).doubleValue();
+                sumDescuentos += ((Number) c.get("total_descuentos")).doubleValue();
                 sumTotalPagar += ((Number) c.get("total_a_pagar")).doubleValue();
             }
 
@@ -377,9 +439,10 @@ public class PayrollController {
                 "indicadores", Map.of(
                     "total_colaboradores", calculated.size(),
                     "total_altas_equipo", teamAltasTotal,
+                    "total_sueldos_base", Math.round(sumSueldos * 100.0) / 100.0,
                     "total_comisiones", Math.round(sumComisiones * 100.0) / 100.0,
                     "total_bonos", Math.round(sumBonos * 100.0) / 100.0,
-                    "total_sueldos_base", Math.round(sumSueldos * 100.0) / 100.0,
+                    "total_descuentos", Math.round(sumDescuentos * 100.0) / 100.0,
                     "total_a_pagar", Math.round(sumTotalPagar * 100.0) / 100.0
                 ),
                 "detalles", calculated
@@ -389,6 +452,108 @@ public class PayrollController {
                 .body(Map.of("message", "Error al calcular comisiones de personal: " + e.getMessage()));
         }
     }
+
+    // ==========================================
+    // 2.2. DESCUENTOS DE PERSONAL (CRUD)
+    // ==========================================
+    @GetMapping("/discounts")
+    public ResponseEntity<?> getDiscounts(
+        @RequestParam(value = "mes", required = false) Integer mes,
+        @RequestParam(value = "anio", required = false) Integer anio,
+        @RequestParam(value = "trabajador_id", required = false) Long trabajador_id
+    ) {
+        try {
+            StringBuilder sql = new StringBuilder(
+                "SELECT d.*, TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))) as trabajador_nombre, " +
+                "t.dni as trabajador_dni, t.rol_operativo " +
+                "FROM trabajadores_descuentos d " +
+                "JOIN trabajadores t ON d.trabajador_id = t.id " +
+                "WHERE 1=1"
+            );
+            List<Object> params = new ArrayList<>();
+            if (mes != null) {
+                sql.append(" AND d.periodo_mes = ?");
+                params.add(mes);
+            }
+            if (anio != null) {
+                sql.append(" AND d.periodo_anio = ?");
+                params.add(anio);
+            }
+            if (trabajador_id != null) {
+                sql.append(" AND d.trabajador_id = ?");
+                params.add(trabajador_id);
+            }
+            sql.append(" ORDER BY d.fecha DESC, d.id DESC");
+            List<Map<String, Object>> list = jdbcTemplate.queryForList(sql.toString(), params.toArray());
+            return ResponseEntity.ok(list);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al listar descuentos: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/discounts")
+    @Transactional
+    public ResponseEntity<?> saveDiscount(@RequestBody SaveDiscountRequest req) {
+        try {
+            if (req.trabajador_id == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "El colaborador es obligatorio."));
+            }
+            if (req.monto == null || req.monto <= 0) {
+                return ResponseEntity.badRequest().body(Map.of("message", "El monto del descuento debe ser mayor a 0."));
+            }
+            if (req.tipo == null || req.tipo.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "El tipo de descuento es obligatorio."));
+            }
+            if (req.motivo == null || req.motivo.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "El motivo o justificación del descuento es obligatorio."));
+            }
+
+            LocalDate now = LocalDate.now();
+            int mes = req.mes != null ? req.mes : now.getMonthValue();
+            int anio = req.anio != null ? req.anio : now.getYear();
+            Date fecha = req.fecha != null ? Date.valueOf(req.fecha) : Date.valueOf(now);
+            String estado = req.estado != null ? req.estado : "Pendiente";
+            String regPor = req.registrado_por != null ? req.registrado_por : "Administración";
+
+            if (req.id != null) {
+                jdbcTemplate.update(
+                    "UPDATE trabajadores_descuentos SET trabajador_id = ?, periodo_mes = ?, periodo_anio = ?, " +
+                    "fecha = ?, tipo = ?, monto = ?, motivo = ?, estado = ?, registrado_por = ? WHERE id = ?",
+                    req.trabajador_id, mes, anio, fecha, req.tipo, req.monto, req.motivo, estado, regPor, req.id
+                );
+                return ResponseEntity.ok(Map.of("message", "Descuento actualizado exitosamente.", "id", req.id));
+            } else {
+                jdbcTemplate.update(
+                    "INSERT INTO trabajadores_descuentos (trabajador_id, periodo_mes, periodo_anio, fecha, tipo, monto, motivo, estado, registrado_por) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    req.trabajador_id, mes, anio, fecha, req.tipo, req.monto, req.motivo, estado, regPor
+                );
+                Long newId = jdbcTemplate.queryForObject("SELECT lastval()", Long.class);
+                return ResponseEntity.ok(Map.of("message", "Descuento registrado exitosamente.", "id", newId));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al guardar descuento: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/discounts/{id}")
+    @Transactional
+    public ResponseEntity<?> deleteDiscount(@PathVariable Long id) {
+        try {
+            int rows = jdbcTemplate.update("DELETE FROM trabajadores_descuentos WHERE id = ?", id);
+            if (rows > 0) {
+                return ResponseEntity.ok(Map.of("message", "Descuento eliminado exitosamente."));
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("message", "Error al eliminar descuento: " + e.getMessage()));
+        }
+    }
+
 
     // ==========================================
     // 3. ATTENDANCE (ASISTENCIA) ENDPOINTS
@@ -1065,5 +1230,18 @@ public class PayrollController {
             if (notes != null && !notes.trim().isEmpty()) return notes;
             return "";
         }
+    }
+
+    public static class SaveDiscountRequest {
+        public Long id;
+        public Long trabajador_id;
+        public Integer mes;
+        public Integer anio;
+        public String fecha;
+        public String tipo;
+        public Double monto;
+        public String motivo;
+        public String estado = "Pendiente";
+        public String registrado_por;
     }
 }
