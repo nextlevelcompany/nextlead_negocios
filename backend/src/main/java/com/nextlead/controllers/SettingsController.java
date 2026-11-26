@@ -171,15 +171,38 @@ public class SettingsController {
                     "data", response.getBody() != null ? response.getBody() : Map.of()
             ));
         } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            String rawError = e.getResponseBodyAsString();
+            String friendlyMessage = "Error devuelto por los servidores de Meta.";
+            try {
+                com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(rawError);
+                if (root.has("error")) {
+                    com.fasterxml.jackson.databind.JsonNode errNode = root.get("error");
+                    String msg = errNode.path("message").asText("");
+                    int code = errNode.path("code").asInt(0);
+                    int subcode = errNode.path("error_subcode").asInt(0);
+
+                    if (code == 190 && subcode == 467) {
+                        friendlyMessage = "El token de acceso de Meta ha expirado porque se cerró sesión en Facebook o era un token temporal de 24h. Debe generar un 'Token Permanente de Usuario del Sistema' (System User Token) en Meta Business Manager.";
+                    } else if (code == 190) {
+                        friendlyMessage = "El token de acceso de Meta es inválido, expiró o fue revocado. Genere un nuevo Token Permanente en business.facebook.com.";
+                    } else if (code == 100 && subcode == 33) {
+                        friendlyMessage = "El Identificador de Teléfono (Phone Number ID) no existe o no pertenece a la aplicación Meta de este token.";
+                    } else if (!msg.isEmpty()) {
+                        friendlyMessage = "Meta API: " + msg;
+                    }
+                }
+            } catch (Exception ignored) {}
+
             return ResponseEntity.ok(Map.of(
                     "success", false,
                     "statusCode", e.getStatusCode().value(),
-                    "error", e.getResponseBodyAsString()
+                    "error", friendlyMessage,
+                    "rawError", rawError
             ));
         } catch (Exception e) {
             return ResponseEntity.ok(Map.of(
                     "success", false,
-                    "error", e.getMessage()
+                    "error", e.getMessage() != null ? e.getMessage() : "Error inesperado al conectar con Meta"
             ));
         }
     }
@@ -228,15 +251,29 @@ public class SettingsController {
                     "raw", response.getBody() != null ? response.getBody() : ""
             ));
         } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            String rawError = e.getResponseBodyAsString();
+            String friendlyMessage = "Error devuelto por la API de Google Gemini.";
+            try {
+                com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(rawError);
+                if (root.has("error")) {
+                    com.fasterxml.jackson.databind.JsonNode errNode = root.get("error");
+                    String msg = errNode.path("message").asText("");
+                    if (!msg.isEmpty()) {
+                        friendlyMessage = "Gemini API: " + msg;
+                    }
+                }
+            } catch (Exception ignored) {}
+
             return ResponseEntity.ok(Map.of(
                     "success", false,
                     "statusCode", e.getStatusCode().value(),
-                    "error", e.getResponseBodyAsString()
+                    "error", friendlyMessage,
+                    "rawError", rawError
             ));
         } catch (Exception e) {
             return ResponseEntity.ok(Map.of(
                     "success", false,
-                    "error", e.getMessage()
+                    "error", e.getMessage() != null ? e.getMessage() : "Error inesperado al conectar con Gemini"
             ));
         }
     }

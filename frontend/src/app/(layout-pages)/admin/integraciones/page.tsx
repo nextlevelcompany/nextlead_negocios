@@ -262,7 +262,7 @@ export default function IntegracionesPage() {
       if (res.data?.success) {
         toast.success("¡Conexión exitosa con Meta Cloud API!");
       } else {
-        toast.error("Error con Meta: " + (res.data?.error || "Verifique credenciales"));
+        toast.error(res.data?.error || "Error al conectar con Meta");
       }
     } catch (err: any) {
       setMetaTestResult({ success: false, error: err.message });
@@ -615,7 +615,7 @@ export default function IntegracionesPage() {
                   ) : (
                     <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                   )}
-                  <div>
+                  <div className="flex-1">
                     <h5 className="font-semibold text-sm mb-0.5">
                       {metaTestResult.success
                         ? "Conexión a Meta WhatsApp Cloud API Verificada"
@@ -628,7 +628,21 @@ export default function IntegracionesPage() {
                         <p><strong>Calidad de Línea:</strong> Calidad {metaTestResult.data.quality_rating}</p>
                       </div>
                     ) : (
-                      <p className="font-mono">{metaTestResult.error || "Código de error devuelto por Meta"}</p>
+                      <div className="space-y-1.5 mt-1">
+                        <p className="font-medium text-xs leading-relaxed text-destructive">
+                          {metaTestResult.error || "Error al conectar con los servidores de Meta"}
+                        </p>
+                        {metaTestResult.rawError && (
+                          <details className="mt-1 cursor-pointer">
+                            <summary className="text-[11px] text-muted-foreground hover:underline">
+                              Ver respuesta técnica detallada de Meta
+                            </summary>
+                            <pre className="mt-1.5 p-2 bg-destructive/5 rounded border text-[10px] font-mono whitespace-pre-wrap overflow-x-auto max-h-32">
+                              {metaTestResult.rawError}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
