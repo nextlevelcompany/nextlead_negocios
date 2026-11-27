@@ -497,7 +497,55 @@ public class DatabaseInitializer implements CommandLineRunner {
             "ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS media_id_whatsapp VARCHAR(200)",
             "ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS media_caption TEXT",
 
-            "ALTER TABLE shipping_coverage ADD COLUMN IF NOT EXISTS aliases TEXT"
+            "ALTER TABLE shipping_coverage ADD COLUMN IF NOT EXISTS aliases TEXT",
+
+            // ── Descuentos de trabajadores (Nómina y Comisiones) ───────────────
+            "CREATE TABLE IF NOT EXISTS trabajadores_descuentos (" +
+            "    id BIGSERIAL PRIMARY KEY," +
+            "    trabajador_id BIGINT NOT NULL REFERENCES trabajadores(id) ON DELETE CASCADE," +
+            "    periodo_mes INT NOT NULL," +
+            "    periodo_anio INT NOT NULL," +
+            "    fecha DATE DEFAULT CURRENT_DATE," +
+            "    tipo VARCHAR(50) NOT NULL," +
+            "    monto NUMERIC(12, 2) NOT NULL CHECK (monto > 0)," +
+            "    motivo TEXT NOT NULL," +
+            "    estado VARCHAR(30) DEFAULT 'Pendiente'," +
+            "    registrado_por VARCHAR(100)," +
+            "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+            ")",
+            "CREATE INDEX IF NOT EXISTS idx_desc_trab_periodo ON trabajadores_descuentos (trabajador_id, periodo_anio, periodo_mes)",
+
+            // ── Actividades & Planificador (CRM) ──────────────────────────────
+            "CREATE TABLE IF NOT EXISTS crm_actividades (" +
+            "    id BIGSERIAL PRIMARY KEY," +
+            "    tipo VARCHAR(50) NOT NULL," +
+            "    titulo VARCHAR(255) NOT NULL," +
+            "    descripcion TEXT," +
+            "    prioridad VARCHAR(20) DEFAULT 'Media'," +
+            "    fecha_vencimiento TIMESTAMP NOT NULL," +
+            "    fecha_fin TIMESTAMP," +
+            "    todo_el_dia BOOLEAN DEFAULT FALSE," +
+            "    estado VARCHAR(30) DEFAULT 'Pendiente'," +
+            "    resultado VARCHAR(50)," +
+            "    notas_resultado TEXT," +
+            "    duracion_minutos INT DEFAULT 0," +
+            "    trabajador_id BIGINT REFERENCES trabajadores(id) ON DELETE SET NULL," +
+            "    contacto_id BIGINT REFERENCES contacts(id) ON DELETE CASCADE," +
+            "    oportunidad_id BIGINT REFERENCES oportunidades(id) ON DELETE CASCADE," +
+            "    venta_id BIGINT REFERENCES ventas(id) ON DELETE CASCADE," +
+            "    pedido_id BIGINT REFERENCES pedidos(id) ON DELETE CASCADE," +
+            "    creado_por VARCHAR(100)," +
+            "    completada_por VARCHAR(100)," +
+            "    fecha_completada TIMESTAMP," +
+            "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+            "    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+            ")",
+            "CREATE INDEX IF NOT EXISTS idx_actividades_estado_fecha ON crm_actividades (estado, fecha_vencimiento)",
+            "CREATE INDEX IF NOT EXISTS idx_actividades_trabajador ON crm_actividades (trabajador_id)",
+            "CREATE INDEX IF NOT EXISTS idx_actividades_contacto ON crm_actividades (contacto_id)",
+            "CREATE INDEX IF NOT EXISTS idx_actividades_oportunidad ON crm_actividades (oportunidad_id)",
+            "CREATE INDEX IF NOT EXISTS idx_actividades_venta ON crm_actividades (venta_id)",
+            "CREATE INDEX IF NOT EXISTS idx_actividades_pedido ON crm_actividades (pedido_id)"
         };
 
         for (String sql : migrations) {
