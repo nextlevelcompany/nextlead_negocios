@@ -36,6 +36,7 @@ import {
   Boxes,
   Target,
   CalendarCheck,
+  CalendarClock,
   ShieldCheck,
   Palette,
   Receipt,
@@ -143,6 +144,17 @@ const data = {
             {
               title: "Reportes",
               url: "/ventas/reports",
+            },
+          ],
+        },
+        {
+          title: "Actividades",
+          url: "#",
+          icon: <CalendarClock className="size-4" />,
+          items: [
+            {
+              title: "Planificador & Agenda",
+              url: "/actividades",
             },
           ],
         },

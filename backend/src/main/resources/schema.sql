@@ -1032,3 +1032,36 @@ CREATE TABLE IF NOT EXISTS trabajadores_descuentos (
 );
 CREATE INDEX IF NOT EXISTS idx_desc_trab_periodo ON trabajadores_descuentos (trabajador_id, periodo_anio, periodo_mes);
 
+-- Tabla de Registro y Planificación de Actividades (Agenda / Planificador / Bitácora)
+CREATE TABLE IF NOT EXISTS crm_actividades (
+    id BIGSERIAL PRIMARY KEY,
+    tipo VARCHAR(50) NOT NULL,
+    asunto VARCHAR(250) NOT NULL,
+    descripcion TEXT,
+    fecha_programada TIMESTAMP NOT NULL,
+    fecha_fin_programada TIMESTAMP,
+    prioridad VARCHAR(20) DEFAULT 'Media',
+    estado VARCHAR(30) DEFAULT 'Pendiente',
+    fecha_ejecutada TIMESTAMP,
+    resultado_notas TEXT,
+    resultado_estado VARCHAR(50),
+    duracion_minutos INT,
+    contacto_id BIGINT REFERENCES contacts(id) ON DELETE SET NULL,
+    oportunidad_id BIGINT REFERENCES oportunidades(id) ON DELETE SET NULL,
+    venta_id BIGINT REFERENCES ventas(id) ON DELETE SET NULL,
+    pedido_id BIGINT REFERENCES pedidos(id) ON DELETE SET NULL,
+    trabajador_id BIGINT REFERENCES trabajadores(id) ON DELETE SET NULL,
+    usuario_id INT REFERENCES users(id) ON DELETE SET NULL,
+    creado_por VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_actividades_estado_fecha ON crm_actividades (estado, fecha_programada);
+CREATE INDEX IF NOT EXISTS idx_actividades_trabajador ON crm_actividades (trabajador_id, fecha_programada);
+CREATE INDEX IF NOT EXISTS idx_actividades_contacto ON crm_actividades (contacto_id);
+CREATE INDEX IF NOT EXISTS idx_actividades_oportunidad ON crm_actividades (oportunidad_id);
+CREATE INDEX IF NOT EXISTS idx_actividades_venta ON crm_actividades (venta_id);
+CREATE INDEX IF NOT EXISTS idx_actividades_pedido ON crm_actividades (pedido_id);
+
+
