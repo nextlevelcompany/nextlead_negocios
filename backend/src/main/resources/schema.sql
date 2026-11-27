@@ -1058,6 +1058,8 @@ CREATE TABLE IF NOT EXISTS crm_actividades (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE crm_actividades ADD COLUMN IF NOT EXISTS empresa_id BIGINT REFERENCES contacts(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_actividades_estado_fecha ON crm_actividades (estado, fecha_programada);
 CREATE INDEX IF NOT EXISTS idx_actividades_trabajador ON crm_actividades (trabajador_id, fecha_programada);
 CREATE INDEX IF NOT EXISTS idx_actividades_contacto ON crm_actividades (contacto_id);
