@@ -97,7 +97,9 @@ export function ModalCrearActividad({
   const [prioridad, setPrioridad] = useState("Media");
   const [trabajadorId, setTrabajadorId] = useState("");
   const [empresaId, setEmpresaId] = useState<string>("");
+  const [empresaNombre, setEmpresaNombre] = useState<string>("");
   const [contactoId, setContactoId] = useState<string>("");
+  const [contactoNombre, setContactoNombre] = useState<string>("");
 
   // Inicializar o resetear formulario al abrir
   useEffect(() => {
@@ -110,7 +112,9 @@ export function ModalCrearActividad({
       setFechaFinProgramada("");
       setPrioridad("Media");
       setEmpresaId(initialData?.empresa_id ? String(initialData.empresa_id) : "");
+      setEmpresaNombre(initialData?.empresa_nombre || "");
       setContactoId(initialData?.contacto_id ? String(initialData.contacto_id) : "");
+      setContactoNombre(initialData?.contacto_nombre || "");
       setClientSearch("");
       setSearchResults([]);
 
@@ -386,201 +390,248 @@ export function ModalCrearActividad({
             </div>
           </div>
 
-          {/* SELECTOR Y BÚSQUEDA RÁPIDA DE CLIENTE / EMPRESA */}
+          {/* SELECTOR Y VINCULACIÓN DE CLIENTE / EMPRESA */}
           <div className="p-3 bg-muted/20 border rounded-lg space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="font-semibold text-xs text-foreground flex items-center gap-1.5">
-                <Users className="size-3.5 text-primary" />
-                Vincular Cliente / Empresa
-              </label>
-              {(empresaId || contactoId) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmpresaId("");
-                    setContactoId("");
-                    setSelectedClientName("");
-                    setClientSearch("");
-                  }}
-                  className="text-[10px] text-muted-foreground hover:text-rose-600 underline font-medium"
-                >
-                  ✕ Limpiar selección
-                </button>
-              )}
-            </div>
-
-            {/* BARRA DE BÚSQUEDA RÁPIDA EN VIVO */}
-            <div className="relative">
-              <div className="relative flex items-center">
-                <Search className="size-3.5 absolute left-2.5 text-muted-foreground pointer-events-none" />
-                <Input
-                  type="text"
-                  placeholder="🔍 Buscar cliente por nombre, empresa o RUC/DNI..."
-                  value={clientSearch}
-                  onChange={(e) => setClientSearch(e.target.value)}
-                  className="h-8 pl-8 pr-8 text-xs bg-background"
-                />
-                {isSearchingClient && (
-                  <RefreshCw className="size-3 animate-spin absolute right-2.5 text-muted-foreground" />
-                )}
-                {clientSearch && !isSearchingClient && (
+            {/* CASO A: YA HAY UN CLIENTE O EMPRESA SELECCIONADO */}
+            {(empresaId || contactoId || empresaNombre || contactoNombre || selectedClientName) ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Users className="size-3.5 text-primary" />
+                    Cliente / Empresa Vinculada
+                  </span>
                   <button
                     type="button"
                     onClick={() => {
+                      setEmpresaId("");
+                      setEmpresaNombre("");
+                      setContactoId("");
+                      setContactoNombre("");
+                      setSelectedClientName("");
+                      setPersonasEmpresa([]);
                       setClientSearch("");
-                      setSearchResults([]);
                     }}
-                    className="absolute right-2.5 text-xs text-muted-foreground hover:text-foreground"
+                    className="text-[11px] text-muted-foreground hover:text-rose-600 font-medium hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    ✕
+                    ✕ Cambiar Cliente
                   </button>
-                )}
-              </div>
-
-              {/* RESULTADOS DE BÚSQUEDA EN TIEMPO REAL */}
-              {searchResults.length > 0 && (
-                <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-popover border border-border rounded-md shadow-lg p-1 text-xs divide-y divide-border/40">
-                  {searchResults.map((item) => {
-                    const isEmp = item.tipoPersona === "EMPRESA" || item.razonSocial || item.razon_social;
-                    const name = item.razonSocial || item.razon_social || item.nombreDisplay || `${item.nombres || ""} ${item.apellidos || ""}`.trim();
-                    const doc = item.numeroDocumento || item.numero_documento;
-
-                    return (
-                      <button
-                        key={`${item.id}-${isEmp ? "emp" : "nat"}`}
-                        type="button"
-                        onClick={() => {
-                          if (isEmp) {
-                            setEmpresaId(String(item.id));
-                            setSelectedClientName(`🏢 ${name}`);
-                            setContactoId("");
-                            loadPersonasDeEmpresa(item.id);
-                          } else {
-                            setContactoId(String(item.id));
-                            setSelectedClientName(`👤 ${name}`);
-                            if (item.empresaId || item.empresa_id) {
-                              setEmpresaId(String(item.empresaId || item.empresa_id));
-                              loadPersonasDeEmpresa(item.empresaId || item.empresa_id);
-                            } else {
-                              setEmpresaId("");
-                            }
-                          }
-                          setClientSearch("");
-                          setSearchResults([]);
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 hover:bg-muted/60 rounded flex items-center justify-between gap-2 transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="text-sm shrink-0">{isEmp ? "🏢" : "👤"}</span>
-                          <div className="truncate">
-                            <span className="font-semibold text-foreground truncate block">{name}</span>
-                            <span className="text-[10px] text-muted-foreground">
-                              {isEmp ? "Empresa" : "Persona Natural"} {doc ? `• Doc: ${doc}` : ""}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-primary font-medium shrink-0 bg-primary/10 px-1.5 py-0.5 rounded">
-                          Seleccionar
-                        </span>
-                      </button>
-                    );
-                  })}
                 </div>
-              )}
-            </div>
 
-            {/* ENTIDAD SELECCIONADA ACTUALMENTE */}
-            {(empresaId || contactoId || selectedClientName) && (
-              <div className="p-2 bg-primary/5 border border-primary/20 rounded-md flex flex-wrap items-center justify-between gap-1.5 text-xs">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-semibold text-primary">Seleccionado:</span>
-                  {empresaId && (
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 text-[10px] py-0.5">
-                      🏢 Empresa #{empresaId}
-                      {empresas.find((e) => String(e.id) === String(empresaId))?.razonSocial ? `: ${empresas.find((e) => String(e.id) === String(empresaId))?.razonSocial}` : ""}
-                    </Badge>
-                  )}
-                  {contactoId && (
-                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-[10px] py-0.5">
-                      👤 Contacto #{contactoId}
-                      {allContacts.find((c) => String(c.id) === String(contactoId))?.nombreDisplay ? `: ${allContacts.find((c) => String(c.id) === String(contactoId))?.nombreDisplay}` : ""}
-                    </Badge>
-                  )}
-                  {!empresaId && !contactoId && selectedClientName && (
-                    <Badge variant="outline" className="bg-muted text-foreground text-[10px] py-0.5">
-                      {selectedClientName}
-                    </Badge>
-                  )}
+                {/* Tarjeta Visual Destacada de la Entidad */}
+                <div className="p-2.5 bg-background border border-primary/30 rounded-md flex items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-2.5 truncate">
+                    <span className="text-xl shrink-0">{empresaId || empresaNombre ? "🏢" : "👤"}</span>
+                    <div className="truncate">
+                      <div className="font-bold text-xs text-foreground truncate">
+                        {empresaNombre || contactoNombre || selectedClientName || `Entidad #${empresaId || contactoId}`}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                        {empresaId && (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-blue-50 text-blue-700 border-blue-200">
+                            🏢 Cuenta Empresa #{empresaId}
+                          </Badge>
+                        )}
+                        {contactoId && (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1 bg-emerald-50 text-emerald-700 border-emerald-200">
+                            👤 Contacto #{contactoId}
+                          </Badge>
+                        )}
+                        {!empresaId && !contactoId && (
+                          <span className="text-[10px] text-muted-foreground">Vinculado a esta gestión</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-[10px] py-0.5 shrink-0">
+                    ✓ Vinculado
+                  </Badge>
                 </div>
-              </div>
-            )}
 
-            {/* SELECTORES DESPLEGABLES SECUNDARIOS / PERSONAS DE EMPRESA */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-              {/* Selector de Empresa */}
-              <div>
-                <label className="text-[11px] font-semibold text-foreground mb-0.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Building className="size-3 text-blue-600" />
-                    Empresa
-                  </span>
-                </label>
-                <select
-                  value={empresaId}
-                  onChange={(e) => {
-                    setEmpresaId(e.target.value);
-                    setContactoId("");
-                  }}
-                  className="w-full h-8 bg-card border rounded-md px-2 text-xs"
-                >
-                  <option value="">-- Sin Empresa --</option>
-                  {empresas.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      🏢 {emp.razonSocial || emp.nombreDisplay || `Empresa #${emp.id}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Selector de Contacto / Persona de la Empresa */}
-              <div>
-                <label className="text-[11px] font-semibold text-foreground mb-0.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <User className="size-3 text-emerald-600" />
-                    {empresaId ? "Persona de la Empresa" : "Contacto Particular"}
-                  </span>
-                </label>
-                <select
-                  value={contactoId}
-                  onChange={(e) => setContactoId(e.target.value)}
-                  className="w-full h-8 bg-card border rounded-md px-2 text-xs"
-                >
-                  <option value="">-- Seleccionar Persona (Opcional) --</option>
-
-                  {empresaId && personasEmpresa.length > 0 && (
-                    <optgroup label="Personas de esta Empresa">
+                {/* Si es una Empresa con personas de contacto registradas, permitir seleccionar la persona específica */}
+                {empresaId && personasEmpresa.length > 0 && (
+                  <div className="pt-1.5 border-t border-border/40">
+                    <label className="text-[11px] font-semibold text-foreground mb-1 flex items-center gap-1">
+                      <User className="size-3 text-emerald-600" />
+                      Persona de Contacto en esta Empresa (Opcional):
+                    </label>
+                    <select
+                      value={contactoId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setContactoId(val);
+                        const found = personasEmpresa.find((p) => String(p.id) === val);
+                        if (found) {
+                          setContactoNombre(found.nombreDisplay || `${found.nombres || ""} ${found.apellidos || ""}`.trim());
+                        }
+                      }}
+                      className="w-full h-8 bg-card border rounded-md px-2 text-xs font-medium"
+                    >
+                      <option value="">-- Toda la Empresa / Contacto General --</option>
                       {personasEmpresa.map((p) => (
                         <option key={p.id} value={p.id}>
                           👤 {p.nombreDisplay || `${p.nombres || ""} ${p.apellidos || ""}`.trim()} {p.cargo ? `(${p.cargo})` : ""}
                         </option>
                       ))}
-                    </optgroup>
-                  )}
+                    </select>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* CASO B: NO HAY CLIENTE SELECCIONADO -> MOSTRAR BUSCADOR Y DROPDOWNS */
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                    <Users className="size-3.5 text-primary" />
+                    Buscar y Vincular Cliente / Empresa
+                  </label>
+                </div>
 
-                  <optgroup label={empresaId ? "Otros Contactos" : "Todos los Contactos"}>
-                    {allContacts
-                      .filter((c) => !empresaId || c.empresaId === Number(empresaId) || c.tipoPersona === "NATURAL")
-                      .slice(0, 50)
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.tipoPersona === "EMPRESA" ? "🏢 " : "👤 "}
-                          {c.razon_social || c.nombreDisplay || `${c.nombres || ""} ${c.apellidos || ""}`.trim() || `ID #${c.id}`}
+                {/* BARRA DE BÚSQUEDA RÁPIDA EN VIVO */}
+                <div className="relative">
+                  <div className="relative flex items-center">
+                    <Search className="size-3.5 absolute left-2.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      type="text"
+                      placeholder="🔍 Escribe para buscar cliente por nombre, empresa o RUC/DNI..."
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                      className="h-8 pl-8 pr-8 text-xs bg-background"
+                    />
+                    {isSearchingClient && (
+                      <RefreshCw className="size-3 animate-spin absolute right-2.5 text-muted-foreground" />
+                    )}
+                    {clientSearch && !isSearchingClient && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClientSearch("");
+                          setSearchResults([]);
+                        }}
+                        className="absolute right-2.5 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* RESULTADOS DE BÚSQUEDA EN TIEMPO REAL */}
+                  {searchResults.length > 0 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-popover border border-border rounded-md shadow-lg p-1 text-xs divide-y divide-border/40">
+                      {searchResults.map((item) => {
+                        const isEmp = item.tipoPersona === "EMPRESA" || item.razonSocial || item.razon_social;
+                        const name = item.razonSocial || item.razon_social || item.nombreDisplay || `${item.nombres || ""} ${item.apellidos || ""}`.trim();
+                        const doc = item.numeroDocumento || item.numero_documento;
+
+                        return (
+                          <button
+                            key={`${item.id}-${isEmp ? "emp" : "nat"}`}
+                            type="button"
+                            onClick={() => {
+                              if (isEmp) {
+                                setEmpresaId(String(item.id));
+                                setEmpresaNombre(name);
+                                setSelectedClientName(`🏢 ${name}`);
+                                setContactoId("");
+                                setContactoNombre("");
+                                loadPersonasDeEmpresa(item.id);
+                              } else {
+                                setContactoId(String(item.id));
+                                setContactoNombre(name);
+                                setSelectedClientName(`👤 ${name}`);
+                                if (item.empresaId || item.empresa_id) {
+                                  setEmpresaId(String(item.empresaId || item.empresa_id));
+                                  setEmpresaNombre(item.empresa_padre_nombre || "Empresa");
+                                  loadPersonasDeEmpresa(item.empresaId || item.empresa_id);
+                                } else {
+                                  setEmpresaId("");
+                                  setEmpresaNombre("");
+                                }
+                              }
+                              setClientSearch("");
+                              setSearchResults([]);
+                            }}
+                            className="w-full text-left px-2.5 py-1.5 hover:bg-muted/60 rounded flex items-center justify-between gap-2 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="text-sm shrink-0">{isEmp ? "🏢" : "👤"}</span>
+                              <div className="truncate">
+                                <span className="font-semibold text-foreground truncate block">{name}</span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {isEmp ? "Empresa" : "Persona Natural"} {doc ? `• Doc: ${doc}` : ""}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[10px] text-primary font-medium shrink-0 bg-primary/10 px-1.5 py-0.5 rounded">
+                              Seleccionar
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* O Selección Manual desde Catálogo */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <div>
+                    <label className="text-[11px] font-semibold text-foreground mb-0.5 flex items-center gap-1">
+                      <Building className="size-3 text-blue-600" />
+                      O seleccionar Empresa:
+                    </label>
+                    <select
+                      value={empresaId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEmpresaId(val);
+                        setContactoId("");
+                        const found = empresas.find((x) => String(x.id) === val);
+                        if (found) {
+                          setEmpresaNombre(found.razonSocial || found.nombreDisplay || "");
+                        }
+                      }}
+                      className="w-full h-8 bg-card border rounded-md px-2 text-xs"
+                    >
+                      <option value="">-- Sin Empresa --</option>
+                      {empresas.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          🏢 {emp.razonSocial || emp.nombreDisplay || `Empresa #${emp.id}`}
                         </option>
                       ))}
-                  </optgroup>
-                </select>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-foreground mb-0.5 flex items-center gap-1">
+                      <User className="size-3 text-emerald-600" />
+                      O Contacto Particular:
+                    </label>
+                    <select
+                      value={contactoId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setContactoId(val);
+                        const found = allContacts.find((c) => String(c.id) === val);
+                        if (found) {
+                          setContactoNombre(found.nombreDisplay || `${found.nombres || ""} ${found.apellidos || ""}`.trim());
+                        }
+                      }}
+                      className="w-full h-8 bg-card border rounded-md px-2 text-xs"
+                    >
+                      <option value="">-- Seleccionar Persona --</option>
+                      {allContacts
+                        .filter((c) => c.tipoPersona === "NATURAL")
+                        .slice(0, 50)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            👤 {c.nombreDisplay || `${c.nombres || ""} ${c.apellidos || ""}`.trim() || `ID #${c.id}`}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Fecha y Hora de Inicio / Fin */}

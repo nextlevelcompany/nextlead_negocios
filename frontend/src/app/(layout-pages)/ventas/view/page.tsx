@@ -4270,25 +4270,48 @@ export default function SalesViewPage() {
       </Dialog>
 
       {/* Modal Programar Actividad vinculado a la Venta */}
-      {selectedVentaForActividad && (
-        <ModalCrearActividad
-          open={actividadModalOpen}
-          onOpenChange={setActividadModalOpen}
-          onSuccess={() => {
-            toast.success(`Actividad programada para la venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`);
-            fetchSales();
-          }}
-          initialData={{
-            venta_id: selectedVentaForActividad.id,
-            venta_numero: selectedVentaForActividad.numero_venta || `#${selectedVentaForActividad.id}`,
-            contacto_id: selectedVentaForActividad.contacto_id || null,
-            contacto_nombre: selectedVentaForActividad.cliente_nombre_completo || selectedVentaForActividad.cliente_nombre,
-            empresa_id: selectedVentaForActividad.empresa_id || null,
-            asunto: `Instalación / Seguimiento: Venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`,
-            tipo: "Instalación",
-          }}
-        />
-      )}
+      {selectedVentaForActividad && (() => {
+        const isEmpresa =
+          (selectedVentaForActividad as any).contacto_tipo_persona?.toUpperCase() === "EMPRESA" ||
+          Boolean(selectedVentaForActividad.cliente_nombre_completo?.match(/S\.A|S\.R\.L|E\.I\.R\.L|SAC|SRL|EIRL|COMPANY|CORP/i));
+
+        const empId = isEmpresa
+          ? (selectedVentaForActividad.contacto_id || (selectedVentaForActividad as any).empresa_id || null)
+          : ((selectedVentaForActividad as any).empresa_id || null);
+
+        const empNombre = isEmpresa
+          ? (selectedVentaForActividad.cliente_nombre_completo || undefined)
+          : undefined;
+
+        const conId = isEmpresa
+          ? null
+          : (selectedVentaForActividad.contacto_id || null);
+
+        const conNombre = isEmpresa
+          ? undefined
+          : (selectedVentaForActividad.cliente_nombre_completo || undefined);
+
+        return (
+          <ModalCrearActividad
+            open={actividadModalOpen}
+            onOpenChange={setActividadModalOpen}
+            onSuccess={() => {
+              toast.success(`Actividad programada para la venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`);
+              fetchSales();
+            }}
+            initialData={{
+              venta_id: selectedVentaForActividad.id,
+              venta_numero: selectedVentaForActividad.numero_venta || `#${selectedVentaForActividad.id}`,
+              empresa_id: empId,
+              empresa_nombre: empNombre,
+              contacto_id: conId,
+              contacto_nombre: conNombre,
+              asunto: `Instalación / Seguimiento: Venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`,
+              tipo: "Instalación",
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

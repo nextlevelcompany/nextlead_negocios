@@ -2532,24 +2532,50 @@ export default function OpportunitiesKanbanPage() {
       />
 
       {/* Modal para programar actividad vinculada a la oportunidad */}
-      {selectedOppForActividad && (
-        <ModalCrearActividad
-          open={actividadModalOpen}
-          onOpenChange={setActividadModalOpen}
-          onSuccess={() => {
-            toast.success(`Actividad programada para oportunidad #${selectedOppForActividad.id}`);
-            loadData();
-          }}
-          initialData={{
-            oportunidad_id: selectedOppForActividad.id,
-            oportunidad_titulo: selectedOppForActividad.titulo,
-            contacto_id: selectedOppForActividad.contacto_id || null,
-            contacto_nombre: selectedOppForActividad.contacto_nombre_completo || selectedOppForActividad.contacto_persona || selectedOppForActividad.contacto_nombre || undefined,
-            empresa_id: selectedOppForActividad.empresa_id || null,
-            asunto: `Seguimiento: ${selectedOppForActividad.titulo}`,
-          }}
-        />
-      )}
+      {selectedOppForActividad && (() => {
+        const isEmpresa =
+          selectedOppForActividad.contacto_tipo_persona?.toUpperCase() === "EMPRESA" ||
+          (!selectedOppForActividad.contacto_tipo_persona && (
+            Boolean(selectedOppForActividad.contacto_nombre_completo?.match(/S\.A|S\.R\.L|E\.I\.R\.L|SAC|SRL|EIRL|COMPANY|CORP/i)) ||
+            Boolean(selectedOppForActividad.titulo?.match(/S\.A|S\.R\.L|E\.I\.R\.L|SAC|SRL|EIRL|COMPANY|CORP/i))
+          ));
+
+        const empId = isEmpresa
+          ? (selectedOppForActividad.contacto_id || selectedOppForActividad.empresa_id || null)
+          : (selectedOppForActividad.empresa_id || null);
+
+        const empNombre = isEmpresa
+          ? (selectedOppForActividad.contacto_nombre_completo || selectedOppForActividad.empresa_razon_social || undefined)
+          : (selectedOppForActividad.empresa_razon_social || undefined);
+
+        const conId = isEmpresa
+          ? null
+          : (selectedOppForActividad.contacto_id || null);
+
+        const conNombre = isEmpresa
+          ? (selectedOppForActividad.contacto_persona || selectedOppForActividad.contacto_persona_calculado || undefined)
+          : (selectedOppForActividad.contacto_nombre_completo || selectedOppForActividad.contacto_persona || undefined);
+
+        return (
+          <ModalCrearActividad
+            open={actividadModalOpen}
+            onOpenChange={setActividadModalOpen}
+            onSuccess={() => {
+              toast.success(`Actividad programada para oportunidad #${selectedOppForActividad.id}`);
+              loadData();
+            }}
+            initialData={{
+              oportunidad_id: selectedOppForActividad.id,
+              oportunidad_titulo: selectedOppForActividad.titulo,
+              empresa_id: empId,
+              empresa_nombre: empNombre,
+              contacto_id: conId,
+              contacto_nombre: conNombre,
+              asunto: `Seguimiento: ${selectedOppForActividad.titulo}`,
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
