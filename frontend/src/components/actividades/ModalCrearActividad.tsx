@@ -26,6 +26,7 @@ import {
   Phone,
   MessageSquare,
   Users,
+  Search,
 } from "lucide-react";
 
 export interface ModalCrearActividadProps {
@@ -50,6 +51,11 @@ export interface ModalCrearActividadProps {
   };
 }
 
+// Cache global en memoria para acelerar la apertura del modal a 0ms
+let cachedEmpresas: any[] | null = null;
+let cachedStaff: any[] | null = null;
+let cachedContacts: any[] | null = null;
+
 // Función auxiliar para obtener fecha y hora local (YYYY-MM-DDTHH:mm) sin desfase UTC
 export const getLocalIsoString = (d: Date = new Date()) => {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -70,11 +76,17 @@ export function ModalCrearActividad({
   const [isSaving, setIsSaving] = useState(false);
 
   // Catálogos auxiliares
-  const [empresas, setEmpresas] = useState<any[]>([]);
+  const [empresas, setEmpresas] = useState<any[]>(cachedEmpresas || []);
   const [personasEmpresa, setPersonasEmpresa] = useState<any[]>([]);
-  const [allContacts, setAllContacts] = useState<any[]>([]);
-  const [staffList, setStaffList] = useState<any[]>([]);
+  const [allContacts, setAllContacts] = useState<any[]>(cachedContacts || []);
+  const [staffList, setStaffList] = useState<any[]>(cachedStaff || []);
   const [loadingAux, setLoadingAux] = useState(false);
+
+  // Búsqueda rápida de cliente en vivo
+  const [clientSearch, setClientSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearchingClient, setIsSearchingClient] = useState(false);
+  const [selectedClientName, setSelectedClientName] = useState("");
 
   // Form State
   const [tipo, setTipo] = useState("Llamada");
@@ -99,6 +111,15 @@ export function ModalCrearActividad({
       setPrioridad("Media");
       setEmpresaId(initialData?.empresa_id ? String(initialData.empresa_id) : "");
       setContactoId(initialData?.contacto_id ? String(initialData.contacto_id) : "");
+      setClientSearch("");
+      setSearchResults([]);
+
+      const initialName = initialData?.empresa_nombre
+        ? `🏢 ${initialData.empresa_nombre}`
+        : initialData?.contacto_nombre
+        ? `👤 ${initialData.contacto_nombre}`
+        : "";
+      setSelectedClientName(initialName);
 
       loadAuxData(initialData?.empresa_id);
     }
@@ -113,27 +134,97 @@ export function ModalCrearActividad({
     }
   }, [empresaId]);
 
+  // Búsqueda en vivo rápida con debounce
+  useEffect(() => {
+    const query = clientSearch.trim();
+    if (query.length < 2) {
+      setSearchResults([]);
+      setIsSearchingClient(false);
+      return;
+    }
+
+    // 1. Filtrado instantáneo local (0ms)
+    const qLower = query.toLowerCase();
+    const localMatches: any[] = [];
+
+    (cachedEmpresas || empresas).forEach((e) => {
+      const name = (e.razonSocial || e.nombreDisplay || "").toLowerCase();
+      const doc = (e.numeroDocumento || "").toLowerCase();
+      if (name.includes(qLower) || doc.includes(qLower)) {
+        localMatches.push({ ...e, tipoPersona: "EMPRESA" });
+      }
+    });
+
+    (cachedContacts || allContacts).forEach((c) => {
+      const name = `${c.nombres || ""} ${c.apellidos || ""} ${c.razon_social || c.nombreDisplay || ""}`.toLowerCase();
+      const doc = (c.numero_documento || c.numeroDocumento || "").toLowerCase();
+      if ((name.includes(qLower) || doc.includes(qLower)) && !localMatches.some((m) => m.id === c.id)) {
+        localMatches.push(c);
+      }
+    });
+
+    setSearchResults(localMatches.slice(0, 10));
+
+    // 2. Búsqueda en servidor para encontrar cualquier contacto en BD (debounce 250ms)
+    const timer = setTimeout(async () => {
+      try {
+        setIsSearchingClient(true);
+        const res = await api.get(`/api/contacts?search=${encodeURIComponent(query)}&size=15`);
+        const serverData = Array.isArray(res.data) ? res.data : (res.data?.content || []);
+        
+        // Unir evitando duplicados
+        const combined = [...localMatches];
+        serverData.forEach((sItem: any) => {
+          if (!combined.some((m) => m.id === sItem.id)) {
+            combined.push(sItem);
+          }
+        });
+        setSearchResults(combined.slice(0, 15));
+      } catch (err) {
+        // En caso de error de red, mantener los locales
+      } finally {
+        setIsSearchingClient(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [clientSearch]);
+
   const loadAuxData = async (initEmpId?: number | null) => {
     try {
-      setLoadingAux(true);
-      const [resEmpresas, resContacts, resStaff] = await Promise.allSettled([
-        api.get("/api/contacts/empresas"),
-        api.get("/api/contacts?limit=200"),
-        api.get("/api/payroll/staff"),
-      ]);
+      if (!cachedEmpresas || !cachedStaff) {
+        setLoadingAux(true);
+        const [resEmpresas, resContacts, resStaff] = await Promise.allSettled([
+          api.get("/api/contacts/empresas"),
+          api.get("/api/contacts?size=100"),
+          api.get("/api/payroll/staff"),
+        ]);
 
-      if (resEmpresas.status === "fulfilled") {
-        setEmpresas(resEmpresas.value.data || []);
-      }
-      if (resContacts.status === "fulfilled") {
-        const cData = resContacts.value.data;
-        setAllContacts(Array.isArray(cData) ? cData : cData?.content || cData?.contactos || []);
-      }
-      if (resStaff.status === "fulfilled") {
-        const staff = resStaff.value.data || [];
-        setStaffList(staff);
-        if (staff.length > 0 && !trabajadorId) {
-          setTrabajadorId(String(staff[0].id));
+        if (resEmpresas.status === "fulfilled") {
+          const empData = resEmpresas.value.data || [];
+          cachedEmpresas = empData;
+          setEmpresas(empData);
+        }
+        if (resContacts.status === "fulfilled") {
+          const cData = resContacts.value.data;
+          const list = Array.isArray(cData) ? cData : cData?.content || cData?.contactos || [];
+          cachedContacts = list;
+          setAllContacts(list);
+        }
+        if (resStaff.status === "fulfilled") {
+          const staff = resStaff.value.data || [];
+          cachedStaff = staff;
+          setStaffList(staff);
+          if (staff.length > 0 && !trabajadorId) {
+            setTrabajadorId(String(staff[0].id));
+          }
+        }
+      } else {
+        setEmpresas(cachedEmpresas);
+        setStaffList(cachedStaff);
+        if (cachedContacts) setAllContacts(cachedContacts);
+        if (cachedStaff.length > 0 && !trabajadorId) {
+          setTrabajadorId(String(cachedStaff[0].id));
         }
       }
 
@@ -295,98 +386,200 @@ export function ModalCrearActividad({
             </div>
           </div>
 
-          {/* SELECTOR DE EMPRESA Y CONTACTO */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-muted/20 border rounded-lg">
-            {/* 1. Empresa */}
-            <div>
-              <label className="font-semibold text-foreground mb-1 flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <Building className="size-3.5 text-blue-600" />
-                  Empresa (Corporativo)
-                </span>
-                {empresaId && (
+          {/* SELECTOR Y BÚSQUEDA RÁPIDA DE CLIENTE / EMPRESA */}
+          <div className="p-3 bg-muted/20 border rounded-lg space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                <Users className="size-3.5 text-primary" />
+                Vincular Cliente / Empresa
+              </label>
+              {(empresaId || contactoId) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmpresaId("");
+                    setContactoId("");
+                    setSelectedClientName("");
+                    setClientSearch("");
+                  }}
+                  className="text-[10px] text-muted-foreground hover:text-rose-600 underline font-medium"
+                >
+                  ✕ Limpiar selección
+                </button>
+              )}
+            </div>
+
+            {/* BARRA DE BÚSQUEDA RÁPIDA EN VIVO */}
+            <div className="relative">
+              <div className="relative flex items-center">
+                <Search className="size-3.5 absolute left-2.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder="🔍 Buscar cliente por nombre, empresa o RUC/DNI..."
+                  value={clientSearch}
+                  onChange={(e) => setClientSearch(e.target.value)}
+                  className="h-8 pl-8 pr-8 text-xs bg-background"
+                />
+                {isSearchingClient && (
+                  <RefreshCw className="size-3 animate-spin absolute right-2.5 text-muted-foreground" />
+                )}
+                {clientSearch && !isSearchingClient && (
                   <button
                     type="button"
                     onClick={() => {
-                      setEmpresaId("");
-                      setContactoId("");
+                      setClientSearch("");
+                      setSearchResults([]);
                     }}
-                    className="text-[10px] text-muted-foreground hover:text-rose-600 underline"
+                    className="absolute right-2.5 text-xs text-muted-foreground hover:text-foreground"
                   >
-                    Quitar Empresa
+                    ✕
                   </button>
                 )}
-              </label>
-              <select
-                value={empresaId}
-                onChange={(e) => {
-                  setEmpresaId(e.target.value);
-                  setContactoId(""); // Limpiar contacto para elegir de la empresa
-                }}
-                className="w-full h-9 bg-card border rounded-md px-2.5 text-xs font-medium"
-              >
-                <option value="">-- Sin Empresa (Persona Independiente) --</option>
-                {empresas.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    🏢 {emp.razonSocial || emp.nombreDisplay || `Empresa #${emp.id}`}
-                  </option>
-                ))}
-              </select>
-              <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                {empresaId ? "Asociado a la cuenta corporativa." : "Si no hay empresa, se asociará directamente al contacto."}
-              </span>
+              </div>
+
+              {/* RESULTADOS DE BÚSQUEDA EN TIEMPO REAL */}
+              {searchResults.length > 0 && (
+                <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-popover border border-border rounded-md shadow-lg p-1 text-xs divide-y divide-border/40">
+                  {searchResults.map((item) => {
+                    const isEmp = item.tipoPersona === "EMPRESA" || item.razonSocial || item.razon_social;
+                    const name = item.razonSocial || item.razon_social || item.nombreDisplay || `${item.nombres || ""} ${item.apellidos || ""}`.trim();
+                    const doc = item.numeroDocumento || item.numero_documento;
+
+                    return (
+                      <button
+                        key={`${item.id}-${isEmp ? "emp" : "nat"}`}
+                        type="button"
+                        onClick={() => {
+                          if (isEmp) {
+                            setEmpresaId(String(item.id));
+                            setSelectedClientName(`🏢 ${name}`);
+                            setContactoId("");
+                            loadPersonasDeEmpresa(item.id);
+                          } else {
+                            setContactoId(String(item.id));
+                            setSelectedClientName(`👤 ${name}`);
+                            if (item.empresaId || item.empresa_id) {
+                              setEmpresaId(String(item.empresaId || item.empresa_id));
+                              loadPersonasDeEmpresa(item.empresaId || item.empresa_id);
+                            } else {
+                              setEmpresaId("");
+                            }
+                          }
+                          setClientSearch("");
+                          setSearchResults([]);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 hover:bg-muted/60 rounded flex items-center justify-between gap-2 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="text-sm shrink-0">{isEmp ? "🏢" : "👤"}</span>
+                          <div className="truncate">
+                            <span className="font-semibold text-foreground truncate block">{name}</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {isEmp ? "Empresa" : "Persona Natural"} {doc ? `• Doc: ${doc}` : ""}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-primary font-medium shrink-0 bg-primary/10 px-1.5 py-0.5 rounded">
+                          Seleccionar
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* 2. Persona / Contacto */}
-            <div>
-              <label className="font-semibold text-foreground mb-1 flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <User className="size-3.5 text-emerald-600" />
-                  Persona de Contacto
-                </span>
-                {contactoId && (
-                  <button
-                    type="button"
-                    onClick={() => setContactoId("")}
-                    className="text-[10px] text-muted-foreground hover:text-rose-600 underline"
-                  >
-                    Sin contacto
-                  </button>
-                )}
-              </label>
-              <select
-                value={contactoId}
-                onChange={(e) => setContactoId(e.target.value)}
-                className="w-full h-9 bg-card border rounded-md px-2.5 text-xs font-medium"
-              >
-                <option value="">-- Seleccionar Contacto (Opcional) --</option>
+            {/* ENTIDAD SELECCIONADA ACTUALMENTE */}
+            {(empresaId || contactoId || selectedClientName) && (
+              <div className="p-2 bg-primary/5 border border-primary/20 rounded-md flex flex-wrap items-center justify-between gap-1.5 text-xs">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-semibold text-primary">Seleccionado:</span>
+                  {empresaId && (
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 text-[10px] py-0.5">
+                      🏢 Empresa #{empresaId}
+                      {empresas.find((e) => String(e.id) === String(empresaId))?.razonSocial ? `: ${empresas.find((e) => String(e.id) === String(empresaId))?.razonSocial}` : ""}
+                    </Badge>
+                  )}
+                  {contactoId && (
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-[10px] py-0.5">
+                      👤 Contacto #{contactoId}
+                      {allContacts.find((c) => String(c.id) === String(contactoId))?.nombreDisplay ? `: ${allContacts.find((c) => String(c.id) === String(contactoId))?.nombreDisplay}` : ""}
+                    </Badge>
+                  )}
+                  {!empresaId && !contactoId && selectedClientName && (
+                    <Badge variant="outline" className="bg-muted text-foreground text-[10px] py-0.5">
+                      {selectedClientName}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
 
-                {/* Si hay personas registradas en la empresa seleccionada */}
-                {empresaId && personasEmpresa.length > 0 && (
-                  <optgroup label="Personas de esta Empresa">
-                    {personasEmpresa.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        👤 {p.nombreDisplay || `${p.nombres || ""} ${p.apellidos || ""}`.trim()} {p.cargo ? `(${p.cargo})` : ""}
-                      </option>
-                    ))}
+            {/* SELECTORES DESPLEGABLES SECUNDARIOS / PERSONAS DE EMPRESA */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              {/* Selector de Empresa */}
+              <div>
+                <label className="text-[11px] font-semibold text-foreground mb-0.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Building className="size-3 text-blue-600" />
+                    Empresa
+                  </span>
+                </label>
+                <select
+                  value={empresaId}
+                  onChange={(e) => {
+                    setEmpresaId(e.target.value);
+                    setContactoId("");
+                  }}
+                  className="w-full h-8 bg-card border rounded-md px-2 text-xs"
+                >
+                  <option value="">-- Sin Empresa --</option>
+                  {empresas.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      🏢 {emp.razonSocial || emp.nombreDisplay || `Empresa #${emp.id}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Selector de Contacto / Persona de la Empresa */}
+              <div>
+                <label className="text-[11px] font-semibold text-foreground mb-0.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <User className="size-3 text-emerald-600" />
+                    {empresaId ? "Persona de la Empresa" : "Contacto Particular"}
+                  </span>
+                </label>
+                <select
+                  value={contactoId}
+                  onChange={(e) => setContactoId(e.target.value)}
+                  className="w-full h-8 bg-card border rounded-md px-2 text-xs"
+                >
+                  <option value="">-- Seleccionar Persona (Opcional) --</option>
+
+                  {empresaId && personasEmpresa.length > 0 && (
+                    <optgroup label="Personas de esta Empresa">
+                      {personasEmpresa.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          👤 {p.nombreDisplay || `${p.nombres || ""} ${p.apellidos || ""}`.trim()} {p.cargo ? `(${p.cargo})` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  <optgroup label={empresaId ? "Otros Contactos" : "Todos los Contactos"}>
+                    {allContacts
+                      .filter((c) => !empresaId || c.empresaId === Number(empresaId) || c.tipoPersona === "NATURAL")
+                      .slice(0, 50)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.tipoPersona === "EMPRESA" ? "🏢 " : "👤 "}
+                          {c.razon_social || c.nombreDisplay || `${c.nombres || ""} ${c.apellidos || ""}`.trim() || `ID #${c.id}`}
+                        </option>
+                      ))}
                   </optgroup>
-                )}
-
-                {/* Contactos Generales */}
-                <optgroup label={empresaId ? "Otros Contactos" : "Todos los Contactos"}>
-                  {allContacts
-                    .filter((c) => !empresaId || c.empresaId === Number(empresaId) || c.tipoPersona === "NATURAL")
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.tipoPersona === "EMPRESA" ? "🏢 " : "👤 "}
-                        {c.razon_social || c.nombreDisplay || `${c.nombres || ""} ${c.apellidos || ""}`.trim() || `ID #${c.id}`}
-                      </option>
-                    ))}
-                </optgroup>
-              </select>
-              <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                Persona física con quien se gestionará la actividad.
-              </span>
+                </select>
+              </div>
             </div>
           </div>
 

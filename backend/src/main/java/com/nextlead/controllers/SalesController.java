@@ -114,13 +114,28 @@ public class SalesController {
                 "       (SELECT string_agg(CONCAT(vd.cantidad, 'x ', p.nombre), ', ') " +
                 "        FROM venta_detalles vd " +
                 "        JOIN productos p ON vd.producto_id = p.id " +
-                "        WHERE vd.venta_id = v.id) as productos_detalle " +
+                "        WHERE vd.venta_id = v.id) as productos_detalle, " +
+                "       latest_act.act_id, latest_act.act_tipo, latest_act.act_asunto, " +
+                "       latest_act.act_fecha_programada, latest_act.act_estado, latest_act.act_prioridad, " +
+                "       COALESCE(act_count.pendientes_count, 0) as act_pendientes_count " +
                 "FROM ventas v " +
                 "LEFT JOIN contacts c ON v.contacto_id = c.id " +
                 "LEFT JOIN oportunidades o ON v.oportunidad_id = o.id " +
                 "LEFT JOIN trabajadores t ON v.trabajador_id = t.id " +
                 "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
                 "LEFT JOIN trabajadores sup ON COALESCE(v.supervisor_id, t.supervisor_id) = sup.id " +
+                "LEFT JOIN LATERAL ( " +
+                "    SELECT act.id as act_id, act.tipo as act_tipo, act.asunto as act_asunto, " +
+                "           to_char(act.fecha_programada, 'YYYY-MM-DD\"T\"HH24:MI:SS') as act_fecha_programada, " +
+                "           act.estado as act_estado, act.prioridad as act_prioridad " +
+                "    FROM crm_actividades act " +
+                "    WHERE act.venta_id = v.id " +
+                "    ORDER BY CASE WHEN act.estado = 'Pendiente' THEN 0 ELSE 1 END, act.fecha_programada ASC " +
+                "    LIMIT 1 " +
+                ") latest_act ON true " +
+                "LEFT JOIN LATERAL ( " +
+                "    SELECT COUNT(*) as pendientes_count FROM crm_actividades WHERE venta_id = v.id AND estado = 'Pendiente' " +
+                ") act_count ON true " +
                 whereClause +
                 "ORDER BY v.fecha_venta DESC, v.id DESC";
             

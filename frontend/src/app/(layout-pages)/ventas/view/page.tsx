@@ -159,6 +159,13 @@ interface Sale {
   equipo_nombre?: string | null;
   supervisor_id?: number | null;
   supervisor_nombre?: string | null;
+  act_id?: number | null;
+  act_tipo?: string | null;
+  act_asunto?: string | null;
+  act_fecha_programada?: string | null;
+  act_estado?: string | null;
+  act_prioridad?: string | null;
+  act_pendientes_count?: number | null;
   items?: SaleDetailItem[];
 }
 
@@ -2151,6 +2158,99 @@ export default function SalesViewPage() {
                                   </div>
                                 )}
                               </div>
+
+                              {/* 3.1 Indicador Visual de Actividad / Instalación Programada */}
+                              {(() => {
+                                const hasAct = Boolean(sale.act_fecha_programada);
+                                const nowIso = new Date().toISOString();
+                                const isOverdue = hasAct && sale.act_estado === "Pendiente" && sale.act_fecha_programada! < nowIso;
+                                const isPending = hasAct && sale.act_estado === "Pendiente" && !isOverdue;
+                                const isDone = hasAct && sale.act_estado === "Completada";
+
+                                const getTipoIcon = (t?: string | null) => {
+                                  if (t === "Instalación" || t === "Visita Técnica") return "🛠️";
+                                  if (t === "Despacho") return "🚚";
+                                  if (t === "Llamada") return "📞";
+                                  if (t === "WhatsApp") return "💬";
+                                  if (t === "Cobranza") return "💰";
+                                  return "📌";
+                                };
+
+                                const formatShortDate = (dStr?: string | null) => {
+                                  if (!dStr) return "";
+                                  try {
+                                    const d = new Date(dStr);
+                                    return d.toLocaleDateString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+                                  } catch {
+                                    return dStr.substring(0, 16);
+                                  }
+                                };
+
+                                return (
+                                  <div
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedVentaForActividad(sale);
+                                      setActividadModalOpen(true);
+                                    }}
+                                    className={`rounded-md p-1.5 border text-[11px] cursor-pointer transition-all flex items-center justify-between gap-1.5 ${
+                                      isOverdue
+                                        ? "bg-rose-50/90 border-rose-300 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300 hover:bg-rose-100"
+                                        : isPending
+                                        ? "bg-amber-50/90 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300 hover:bg-amber-100"
+                                        : isDone
+                                        ? "bg-emerald-50/90 border-emerald-300 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 hover:bg-emerald-100"
+                                        : "bg-muted/20 border-dashed border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                                    }`}
+                                    title={hasAct ? `${sale.act_asunto || sale.act_tipo} (${sale.act_estado}) - Clic para gestionar` : "Sin actividad / instalación programada - Clic para programar"}
+                                  >
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      {hasAct ? (
+                                        <>
+                                          <span className="text-xs">{getTipoIcon(sale.act_tipo)}</span>
+                                          <span className="truncate font-medium">
+                                            <strong className={isOverdue ? "text-rose-700 font-bold" : ""}>
+                                              {isOverdue ? "¡Vencida! " : isPending ? "Próx: " : "Hecha: "}
+                                            </strong>
+                                            {sale.act_asunto || sale.act_tipo}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CalendarClock className="size-3 text-muted-foreground/70" />
+                                          <span className="italic">Sin actividad / despacho</span>
+                                        </>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-1 shrink-0 text-[10px]">
+                                      {hasAct ? (
+                                        <>
+                                          <span className="font-mono text-[9px] opacity-80">
+                                            {formatShortDate(sale.act_fecha_programada)}
+                                          </span>
+                                          <Badge
+                                            variant="outline"
+                                            className={`text-[8px] px-1 py-0 h-4 uppercase font-bold border-0 ${
+                                              isOverdue
+                                                ? "bg-rose-600 text-white"
+                                                : isPending
+                                                ? "bg-amber-600 text-white"
+                                                : "bg-emerald-600 text-white"
+                                            }`}
+                                          >
+                                            {isOverdue ? "Vencida" : sale.act_estado}
+                                          </Badge>
+                                        </>
+                                      ) : (
+                                        <span className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-0.5">
+                                          + Agendar
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
 
                               {/* 4. Products / Services Preview Block */}
                               <div className="bg-muted/40 border border-border/70 rounded-md p-1.5 space-y-1">
@@ -4176,6 +4276,7 @@ export default function SalesViewPage() {
           onOpenChange={setActividadModalOpen}
           onSuccess={() => {
             toast.success(`Actividad programada para la venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`);
+            fetchSales();
           }}
           initialData={{
             venta_id: selectedVentaForActividad.id,

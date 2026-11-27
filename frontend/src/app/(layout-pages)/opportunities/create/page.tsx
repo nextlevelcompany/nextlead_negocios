@@ -264,7 +264,7 @@ function CreateOpportunityContent() {
               ...prev,
               tipo_propuesta: "venta",
               plazo_acuerdo: 24,
-              etapa_id: String(cols[0].id),
+              etapa_id: searchParams.get("etapa_id") || String(cols[0].id),
               moneda: loadedSettings["cotizacion.moneda_defecto"] || "Soles",
               firma_nombre: loadedSettings["cotizacion.firma_nombre_defecto"] || "",
               firma_cargo: loadedSettings["cotizacion.firma_cargo_defecto"] || "",

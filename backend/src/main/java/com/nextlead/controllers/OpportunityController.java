@@ -132,7 +132,10 @@ public class OpportunityController {
                 "       CASE WHEN (t.id IS NOT NULL OR o.trabajador_id IS NOT NULL OR NULLIF(o.firma_nombre, '') IS NOT NULL) THEN COALESCE(rp.nombre, t.rol_operativo, 'Ejecutivo') ELSE NULL END as vendedor_perfil, " +
                 "       COALESCE(o.supervisor_id, t.supervisor_id) as supervisor_id, " +
                 "       TRIM(CONCAT(sup.nombre, ' ', COALESCE(sup.apellido, ''))) as supervisor_nombre, " +
-                "       COALESCE(t.equipo, 'Equipo Principal') as equipo_nombre " +
+                "       COALESCE(t.equipo, 'Equipo Principal') as equipo_nombre, " +
+                "       latest_act.act_id, latest_act.act_tipo, latest_act.act_asunto, " +
+                "       latest_act.act_fecha_programada, latest_act.act_estado, latest_act.act_prioridad, " +
+                "       COALESCE(act_count.pendientes_count, 0) as act_pendientes_count " +
                 "FROM oportunidades o " +
                 "LEFT JOIN contacts c ON o.contacto_id = c.id " +
                 "LEFT JOIN users u ON o.usuario_id = u.id " +
@@ -141,6 +144,18 @@ public class OpportunityController {
                 "                         OR (o.trabajador_id IS NULL AND o.usuario_id IS NULL AND o.firma_nombre IS NOT NULL AND (t.nombre ILIKE o.firma_nombre OR CONCAT(t.nombre, ' ', t.apellido) ILIKE o.firma_nombre)) " +
                 "LEFT JOIN rentabilidad_perfiles rp ON t.perfil_comision_id = rp.id " +
                 "LEFT JOIN trabajadores sup ON COALESCE(o.supervisor_id, t.supervisor_id) = sup.id " +
+                "LEFT JOIN LATERAL ( " +
+                "    SELECT act.id as act_id, act.tipo as act_tipo, act.asunto as act_asunto, " +
+                "           to_char(act.fecha_programada, 'YYYY-MM-DD\"T\"HH24:MI:SS') as act_fecha_programada, " +
+                "           act.estado as act_estado, act.prioridad as act_prioridad " +
+                "    FROM crm_actividades act " +
+                "    WHERE act.oportunidad_id = o.id " +
+                "    ORDER BY CASE WHEN act.estado = 'Pendiente' THEN 0 ELSE 1 END, act.fecha_programada ASC " +
+                "    LIMIT 1 " +
+                ") latest_act ON true " +
+                "LEFT JOIN LATERAL ( " +
+                "    SELECT COUNT(*) as pendientes_count FROM crm_actividades WHERE oportunidad_id = o.id AND estado = 'Pendiente' " +
+                ") act_count ON true " +
                 oppWhere +
                 "ORDER BY o.orden ASC, o.id DESC";
 

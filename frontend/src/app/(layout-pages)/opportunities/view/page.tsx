@@ -136,6 +136,13 @@ interface Opportunity {
   plazo_acuerdo?: number | null;
   detalles_json?: string | null;
   direccion_completa?: string | null;
+  act_id?: number | null;
+  act_tipo?: string | null;
+  act_asunto?: string | null;
+  act_fecha_programada?: string | null;
+  act_estado?: string | null;
+  act_prioridad?: string | null;
+  act_pendientes_count?: number | null;
 }
 
 interface KanbanTag {
@@ -1453,8 +1460,19 @@ export default function OpportunitiesKanbanPage() {
                       <span className="text-[11px] font-semibold text-muted-foreground mr-0.5" title="Total columna sin IGV">
                         S/ {colTotalSinIgv.toFixed(2)}
                       </span>
-                      {/* Left & Right Reorder Buttons */}
+                      {/* Left & Right Reorder Buttons & Add Opportunity to Column */}
                       <div className="flex items-center bg-muted/70 rounded border p-0.5 gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          asChild
+                          className="h-5 w-5 p-0 text-primary hover:bg-primary/10 cursor-pointer"
+                          title={`Crear oportunidad directamente en ${col.nombre}`}
+                        >
+                          <Link href={`/opportunities/create?etapa_id=${col.id}`}>
+                            <Plus className="size-3.5" />
+                          </Link>
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1677,6 +1695,101 @@ export default function OpportunitiesKanbanPage() {
                                 </div>
                               </div>
                             </div>
+
+                            {/* 3.1 Seguimiento / Actividad Programada Visual */}
+                            {(() => {
+                              const hasAct = Boolean(opp.act_fecha_programada);
+                              const nowIso = new Date().toISOString();
+                              const isOverdue = hasAct && opp.act_estado === "Pendiente" && opp.act_fecha_programada! < nowIso;
+                              const isPending = hasAct && opp.act_estado === "Pendiente" && !isOverdue;
+                              const isDone = hasAct && opp.act_estado === "Completada";
+
+                              const getTipoIcon = (t?: string | null) => {
+                                if (t === "Llamada") return "📞";
+                                if (t === "WhatsApp") return "💬";
+                                if (t === "Reunión Presencial") return "🟣";
+                                if (t === "Videollamada") return "💻";
+                                if (t === "Visita Técnica") return "🛠️";
+                                if (t === "Despacho") return "🚚";
+                                if (t === "Cobranza") return "💰";
+                                return "📌";
+                              };
+
+                              const formatShortDate = (dStr?: string | null) => {
+                                if (!dStr) return "";
+                                try {
+                                  const d = new Date(dStr);
+                                  return d.toLocaleDateString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+                                } catch {
+                                  return dStr.substring(0, 16);
+                                }
+                              };
+
+                              return (
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedOppForActividad(opp);
+                                    setActividadModalOpen(true);
+                                  }}
+                                  className={`rounded-md p-1.5 border text-[11px] cursor-pointer transition-all flex items-center justify-between gap-1.5 ${
+                                    isOverdue
+                                      ? "bg-rose-50/90 border-rose-300 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300 hover:bg-rose-100"
+                                      : isPending
+                                      ? "bg-amber-50/90 border-amber-300 text-amber-900 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300 hover:bg-amber-100"
+                                      : isDone
+                                      ? "bg-emerald-50/90 border-emerald-300 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 hover:bg-emerald-100"
+                                      : "bg-muted/20 border-dashed border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                                  }`}
+                                  title={hasAct ? `${opp.act_asunto || opp.act_tipo} (${opp.act_estado}) - Clic para gestionar` : "Sin actividad programada - Clic para programar"}
+                                >
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    {hasAct ? (
+                                      <>
+                                        <span className="text-xs">{getTipoIcon(opp.act_tipo)}</span>
+                                        <span className="truncate font-medium">
+                                          <strong className={isOverdue ? "text-rose-700 font-bold" : ""}>
+                                            {isOverdue ? "¡Vencida! " : isPending ? "Próx: " : "Hecha: "}
+                                          </strong>
+                                          {opp.act_asunto || opp.act_tipo}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CalendarClock className="size-3 text-muted-foreground/70" />
+                                        <span className="italic">Sin actividad programada</span>
+                                      </>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0 text-[10px]">
+                                    {hasAct ? (
+                                      <>
+                                        <span className="font-mono text-[9px] opacity-80">
+                                          {formatShortDate(opp.act_fecha_programada)}
+                                        </span>
+                                        <Badge
+                                          variant="outline"
+                                          className={`text-[8px] px-1 py-0 h-4 uppercase font-bold border-0 ${
+                                            isOverdue
+                                              ? "bg-rose-600 text-white"
+                                              : isPending
+                                              ? "bg-amber-600 text-white"
+                                              : "bg-emerald-600 text-white"
+                                          }`}
+                                        >
+                                          {isOverdue ? "Vencida" : opp.act_estado}
+                                        </Badge>
+                                      </>
+                                    ) : (
+                                      <span className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-0.5">
+                                        + Agendar
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
                             {/* 4. Proposal Services / Products Preview */}
                             {products.length > 0 && (
@@ -2425,6 +2538,7 @@ export default function OpportunitiesKanbanPage() {
           onOpenChange={setActividadModalOpen}
           onSuccess={() => {
             toast.success(`Actividad programada para oportunidad #${selectedOppForActividad.id}`);
+            loadData();
           }}
           initialData={{
             oportunidad_id: selectedOppForActividad.id,
