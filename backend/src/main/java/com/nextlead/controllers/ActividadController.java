@@ -553,10 +553,21 @@ public class ActividadController {
         if (dateStr == null || dateStr.trim().isEmpty()) return new Timestamp(System.currentTimeMillis());
         try {
             String clean = dateStr.trim();
-            if (clean.length() == 10) clean += " 09:00:00"; // default 9am if only date provided
+            // Handle ISO format with timezone/offset or Z
+            if (clean.endsWith("Z") || (clean.lastIndexOf("-") > 8 && clean.contains("T")) || clean.contains("+")) {
+                try {
+                    java.time.OffsetDateTime odt = java.time.OffsetDateTime.parse(clean);
+                    return Timestamp.from(odt.toInstant());
+                } catch (Exception ignored) {}
+                try {
+                    java.time.Instant inst = java.time.Instant.parse(clean);
+                    return Timestamp.from(inst);
+                } catch (Exception ignored) {}
+            }
             if (clean.contains("T")) clean = clean.replace("T", " ");
+            if (clean.length() == 10) clean += " 09:00:00"; // default 9am if only date provided
             if (clean.length() == 16) clean += ":00"; // if format YYYY-MM-DD HH:mm
-            if (clean.length() > 19) clean = clean.substring(0, 19); // truncate fractional seconds
+            if (clean.length() > 19) clean = clean.substring(0, 19); // truncate fractional seconds or extra
             return Timestamp.valueOf(clean);
         } catch (Exception e) {
             return new Timestamp(System.currentTimeMillis());

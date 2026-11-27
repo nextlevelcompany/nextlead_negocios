@@ -54,6 +54,7 @@ import {
   ListTodo,
   UserCheck,
   Building,
+  CalendarClock,
 } from "lucide-react";
 import { ModalCrearActividad } from "@/components/actividades/ModalCrearActividad";
 
@@ -264,8 +265,15 @@ export default function ActividadesPage() {
   // Drag & drop reschedule
   const handleEventDrop = async (info: any) => {
     const actId = info.event.id;
-    const newStart = info.event.startStr;
-    const newEnd = info.event.endStr || null;
+    let newStart = info.event.startStr;
+    let newEnd = info.event.endStr || null;
+
+    if (newStart && newStart.length > 19) {
+      newStart = newStart.slice(0, 19);
+    }
+    if (newEnd && newEnd.length > 19) {
+      newEnd = newEnd.slice(0, 19);
+    }
 
     try {
       await api.put(`/api/actividades/${actId}`, {
@@ -1276,18 +1284,49 @@ export default function ActividadesPage() {
 
                 <div className="flex items-center gap-2">
                   {selectedActivity.estado !== "Completada" && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        setIsDetailModalOpen(false);
-                        handleOpenCompleteModal(selectedActivity);
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs"
-                    >
-                      <CheckSquare className="size-3.5" />
-                      <span>Marcar Hecho</span>
-                    </Button>
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setIsDetailModalOpen(false);
+                          handleOpenCreateModal(undefined, {
+                            id: selectedActivity.id,
+                            asunto: selectedActivity.asunto,
+                            tipo: selectedActivity.tipo,
+                            descripcion: selectedActivity.descripcion,
+                            prioridad: selectedActivity.prioridad,
+                            fecha_programada: selectedActivity.fecha_programada,
+                            fecha_fin_programada: selectedActivity.fecha_fin_programada,
+                            empresa_id: selectedActivity.empresa_id,
+                            empresa_nombre: selectedActivity.empresa_razon_social,
+                            contacto_id: selectedActivity.contacto_id,
+                            contacto_nombre: selectedActivity.contacto_nombre,
+                            oportunidad_id: selectedActivity.oportunidad_id,
+                            pedido_id: selectedActivity.pedido_id,
+                            venta_id: selectedActivity.venta_id,
+                            trabajador_id: selectedActivity.trabajador_id,
+                          });
+                        }}
+                        className="text-blue-600 hover:bg-blue-50 border-blue-200 gap-1 text-xs"
+                      >
+                        <CalendarClock className="size-3.5" />
+                        <span>Reprogramar / Editar</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setIsDetailModalOpen(false);
+                          handleOpenCompleteModal(selectedActivity);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs"
+                      >
+                        <CheckSquare className="size-3.5" />
+                        <span>Marcar Hecho</span>
+                      </Button>
+                    </>
                   )}
                   <Button type="button" variant="outline" size="sm" onClick={() => setIsDetailModalOpen(false)}>
                     Cerrar

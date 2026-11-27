@@ -181,6 +181,7 @@ export default function OpportunitiesKanbanPage() {
 
   // Actividades State
   const [selectedOppForActividad, setSelectedOppForActividad] = useState<Opportunity | null>(null);
+  const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null);
   const [actividadModalOpen, setActividadModalOpen] = useState(false);
 
   const getOpportunityWhatsAppParams = (opp: Opportunity): OpportunityWhatsAppParams => {
@@ -1578,6 +1579,7 @@ export default function OpportunitiesKanbanPage() {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedOppForActividad(opp);
+                                      setSelectedActivityId(null);
                                       setActividadModalOpen(true);
                                     }}
                                     className="cursor-pointer text-xs text-blue-700 font-medium"
@@ -1675,6 +1677,7 @@ export default function OpportunitiesKanbanPage() {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedOppForActividad(opp);
+                                      setSelectedActivityId(null);
                                       setActividadModalOpen(true);
                                     }}
                                     title="Programar una llamada, reunión o seguimiento en la agenda"
@@ -1730,6 +1733,7 @@ export default function OpportunitiesKanbanPage() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setSelectedOppForActividad(opp);
+                                    setSelectedActivityId(opp.act_id || null);
                                     setActividadModalOpen(true);
                                   }}
                                   className={`rounded-md p-1.5 border text-[11px] cursor-pointer transition-all flex items-center justify-between gap-1.5 ${
@@ -2228,6 +2232,7 @@ export default function OpportunitiesKanbanPage() {
                               className="h-7 w-7 text-blue-600 hover:bg-blue-50"
                               onClick={() => {
                                 setSelectedOppForActividad(opp);
+                                setSelectedActivityId(opp.act_id || null);
                                 setActividadModalOpen(true);
                               }}
                               title="Programar Actividad / Seguimiento"
@@ -2556,22 +2561,30 @@ export default function OpportunitiesKanbanPage() {
           ? (selectedOppForActividad.contacto_persona || selectedOppForActividad.contacto_persona_calculado || undefined)
           : (selectedOppForActividad.contacto_nombre_completo || selectedOppForActividad.contacto_persona || undefined);
 
+        const isEditing = Boolean(selectedActivityId);
         return (
           <ModalCrearActividad
             open={actividadModalOpen}
-            onOpenChange={setActividadModalOpen}
+            onOpenChange={(v) => {
+              setActividadModalOpen(v);
+              if (!v) setSelectedActivityId(null);
+            }}
             onSuccess={() => {
-              toast.success(`Actividad programada para oportunidad #${selectedOppForActividad.id}`);
+              toast.success(isEditing ? "Actividad actualizada con éxito." : `Actividad programada para oportunidad #${selectedOppForActividad.id}`);
               loadData();
             }}
             initialData={{
+              id: isEditing ? selectedActivityId : undefined,
               oportunidad_id: selectedOppForActividad.id,
               oportunidad_titulo: selectedOppForActividad.titulo,
               empresa_id: empId,
               empresa_nombre: empNombre,
               contacto_id: conId,
               contacto_nombre: conNombre,
-              asunto: `Seguimiento: ${selectedOppForActividad.titulo}`,
+              asunto: isEditing && selectedOppForActividad.act_asunto ? selectedOppForActividad.act_asunto : `Seguimiento: ${selectedOppForActividad.titulo}`,
+              tipo: isEditing && selectedOppForActividad.act_tipo ? selectedOppForActividad.act_tipo : "Llamada",
+              prioridad: isEditing && selectedOppForActividad.act_prioridad ? selectedOppForActividad.act_prioridad : "Media",
+              fecha_programada: isEditing && selectedOppForActividad.act_fecha_programada ? selectedOppForActividad.act_fecha_programada : undefined,
             }}
           />
         );

@@ -34,6 +34,7 @@ export interface ModalCrearActividadProps {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
   initialData?: {
+    id?: number | null;
     empresa_id?: number | null;
     empresa_nombre?: string;
     contacto_id?: number | null;
@@ -47,7 +48,10 @@ export interface ModalCrearActividadProps {
     asunto?: string;
     tipo?: string;
     descripcion?: string;
+    prioridad?: string;
     fecha_programada?: string;
+    fecha_fin_programada?: string;
+    trabajador_id?: number | null;
   };
 }
 
@@ -108,9 +112,25 @@ export function ModalCrearActividad({
       setTipo(initialData?.tipo || "Llamada");
       setAsunto(initialData?.asunto || "");
       setDescripcion(initialData?.descripcion || "");
-      setFechaProgramada(initialData?.fecha_programada || nowLocal);
-      setFechaFinProgramada("");
-      setPrioridad("Media");
+
+      let initFecha = nowLocal;
+      if (initialData?.fecha_programada) {
+        const clean = initialData.fecha_programada.replace(" ", "T");
+        initFecha = clean.length >= 16 ? clean.slice(0, 16) : clean;
+      }
+      setFechaProgramada(initFecha);
+
+      let initFechaFin = "";
+      if (initialData?.fecha_fin_programada) {
+        const cleanFin = initialData.fecha_fin_programada.replace(" ", "T");
+        initFechaFin = cleanFin.length >= 16 ? cleanFin.slice(0, 16) : cleanFin;
+      }
+      setFechaFinProgramada(initFechaFin);
+
+      setPrioridad(initialData?.prioridad || "Media");
+      if (initialData?.trabajador_id) {
+        setTrabajadorId(String(initialData.trabajador_id));
+      }
       setEmpresaId(initialData?.empresa_id ? String(initialData.empresa_id) : "");
       setEmpresaNombre(initialData?.empresa_nombre || "");
       setContactoId(initialData?.contacto_id ? String(initialData.contacto_id) : "");
@@ -279,13 +299,18 @@ export function ModalCrearActividad({
         venta_id: initialData?.venta_id || null,
       };
 
-      await api.post("/api/actividades", payload);
-      toast.success("Actividad programada y visible en el planificador.");
+      if (initialData?.id) {
+        await api.put(`/api/actividades/${initialData.id}`, payload);
+        toast.success("Actividad y fecha actualizadas con éxito.");
+      } else {
+        await api.post("/api/actividades", payload);
+        toast.success("Actividad programada y visible en el planificador.");
+      }
       onOpenChange(false);
       onSuccess?.();
     } catch (err: any) {
       console.error("Error al guardar actividad:", err);
-      toast.error(err.response?.data?.message || "No se pudo programar la actividad.");
+      toast.error(err.response?.data?.message || "No se pudo guardar la actividad.");
     } finally {
       setIsSaving(false);
     }
@@ -297,10 +322,12 @@ export function ModalCrearActividad({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-primary text-base sm:text-lg">
             <CalendarCheck className="size-5" />
-            <span>Programar Nueva Actividad</span>
+            <span>{initialData?.id ? "Reprogramar / Editar Actividad" : "Programar Nueva Actividad"}</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Planifica una gestión (llamada, reunión, visita, cobro) vinculada a tu empresa, contacto o módulo comercial.
+            {initialData?.id
+              ? "Modifica la fecha, hora, notas o reasigna esta actividad existente."
+              : "Planifica una gestión (llamada, reunión, visita, cobro) vinculada a tu empresa, contacto o módulo comercial."}
           </DialogDescription>
         </DialogHeader>
 
@@ -709,7 +736,7 @@ export function ModalCrearActividad({
             </Button>
             <Button type="submit" size="sm" disabled={isSaving} className="gap-1.5">
               {isSaving ? <RefreshCw className="size-4 animate-spin" /> : <CalendarCheck className="size-4" />}
-              <span>Guardar Actividad</span>
+              <span>{isSaving ? "Guardando..." : initialData?.id ? "Guardar Cambios" : "Guardar Actividad"}</span>
             </Button>
           </DialogFooter>
         </form>

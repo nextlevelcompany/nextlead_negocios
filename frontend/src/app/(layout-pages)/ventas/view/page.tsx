@@ -246,6 +246,7 @@ export default function SalesViewPage() {
 
   // Actividades State
   const [selectedVentaForActividad, setSelectedVentaForActividad] = useState<any | null>(null);
+  const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null);
   const [actividadModalOpen, setActividadModalOpen] = useState(false);
 
   // Filters State
@@ -2056,6 +2057,7 @@ export default function SalesViewPage() {
                                     <DropdownMenuItem
                                       onClick={() => {
                                         setSelectedVentaForActividad(sale);
+                                        setSelectedActivityId(null);
                                         setActividadModalOpen(true);
                                       }}
                                       className="cursor-pointer text-xs text-blue-700 font-medium"
@@ -2191,6 +2193,7 @@ export default function SalesViewPage() {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedVentaForActividad(sale);
+                                      setSelectedActivityId(sale.act_id || null);
                                       setActividadModalOpen(true);
                                     }}
                                     className={`rounded-md p-1.5 border text-[11px] cursor-pointer transition-all flex items-center justify-between gap-1.5 ${
@@ -2968,6 +2971,7 @@ export default function SalesViewPage() {
                                   <DropdownMenuItem
                                     onClick={() => {
                                       setSelectedVentaForActividad(sale);
+                                      setSelectedActivityId(sale.act_id || null);
                                       setActividadModalOpen(true);
                                     }}
                                     className="gap-2 cursor-pointer text-blue-700 font-medium"
@@ -4291,23 +4295,30 @@ export default function SalesViewPage() {
           ? undefined
           : (selectedVentaForActividad.cliente_nombre_completo || undefined);
 
+        const isEditing = Boolean(selectedActivityId);
         return (
           <ModalCrearActividad
             open={actividadModalOpen}
-            onOpenChange={setActividadModalOpen}
+            onOpenChange={(v) => {
+              setActividadModalOpen(v);
+              if (!v) setSelectedActivityId(null);
+            }}
             onSuccess={() => {
-              toast.success(`Actividad programada para la venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`);
+              toast.success(isEditing ? "Actividad actualizada con éxito." : `Actividad programada para la venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`);
               fetchSales();
             }}
             initialData={{
+              id: isEditing ? selectedActivityId : undefined,
               venta_id: selectedVentaForActividad.id,
               venta_numero: selectedVentaForActividad.numero_venta || `#${selectedVentaForActividad.id}`,
               empresa_id: empId,
               empresa_nombre: empNombre,
               contacto_id: conId,
               contacto_nombre: conNombre,
-              asunto: `Instalación / Seguimiento: Venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`,
-              tipo: "Instalación",
+              asunto: isEditing && selectedVentaForActividad.act_asunto ? selectedVentaForActividad.act_asunto : `Instalación / Seguimiento: Venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`,
+              tipo: isEditing && selectedVentaForActividad.act_tipo ? selectedVentaForActividad.act_tipo : "Instalación",
+              prioridad: isEditing && selectedVentaForActividad.act_prioridad ? selectedVentaForActividad.act_prioridad : "Media",
+              fecha_programada: isEditing && selectedVentaForActividad.act_fecha_programada ? selectedVentaForActividad.act_fecha_programada : undefined,
             }}
           />
         );
