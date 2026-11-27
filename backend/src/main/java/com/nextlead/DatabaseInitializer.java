@@ -545,7 +545,18 @@ public class DatabaseInitializer implements CommandLineRunner {
             "CREATE INDEX IF NOT EXISTS idx_actividades_contacto ON crm_actividades (contacto_id)",
             "CREATE INDEX IF NOT EXISTS idx_actividades_oportunidad ON crm_actividades (oportunidad_id)",
             "CREATE INDEX IF NOT EXISTS idx_actividades_venta ON crm_actividades (venta_id)",
-            "CREATE INDEX IF NOT EXISTS idx_actividades_pedido ON crm_actividades (pedido_id)"
+            "CREATE INDEX IF NOT EXISTS idx_actividades_pedido ON crm_actividades (pedido_id)",
+
+            // Compatibilidad y columnas de crm_actividades
+            "ALTER TABLE crm_actividades ADD COLUMN IF NOT EXISTS asunto VARCHAR(250)",
+            "ALTER TABLE crm_actividades ADD COLUMN IF NOT EXISTS fecha_programada TIMESTAMP",
+            "ALTER TABLE crm_actividades ADD COLUMN IF NOT EXISTS fecha_fin_programada TIMESTAMP",
+            "ALTER TABLE crm_actividades ADD COLUMN IF NOT EXISTS fecha_ejecutada TIMESTAMP",
+            "ALTER TABLE crm_actividades ADD COLUMN IF NOT EXISTS resultado_notas TEXT",
+            "ALTER TABLE crm_actividades ADD COLUMN IF NOT EXISTS resultado_estado VARCHAR(50)",
+            "ALTER TABLE crm_actividades ADD COLUMN IF NOT EXISTS usuario_id INT REFERENCES users(id) ON DELETE SET NULL",
+            "ALTER TABLE crm_actividades ADD COLUMN IF NOT EXISTS empresa_id BIGINT REFERENCES contacts(id) ON DELETE SET NULL",
+            "CREATE INDEX IF NOT EXISTS idx_actividades_empresa ON crm_actividades (empresa_id)"
         };
 
         for (String sql : migrations) {

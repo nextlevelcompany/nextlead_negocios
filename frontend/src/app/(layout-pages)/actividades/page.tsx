@@ -53,7 +53,9 @@ import {
   CheckSquare,
   ListTodo,
   UserCheck,
+  Building,
 } from "lucide-react";
+import { ModalCrearActividad } from "@/components/actividades/ModalCrearActividad";
 
 export default function ActividadesPage() {
   const [loading, setLoading] = useState(true);
@@ -74,33 +76,22 @@ export default function ActividadesPage() {
 
   // Filtros
   const [filterTrabajador, setFilterTrabajador] = useState<string>("all");
+  const [filterEmpresa, setFilterEmpresa] = useState<string>("all");
   const [filterTipo, setFilterTipo] = useState<string>("all");
   const [filterContexto, setFilterContexto] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"hoy" | "vencidas" | "programadas" | "historial">("hoy");
+  const [activeTab, setActiveTab] = useState<"todas" | "hoy" | "vencidas" | "programadas" | "historial">("todas");
 
   // Selectores para el modal de creación
   const [staffList, setStaffList] = useState<any[]>([]);
+  const [empresasList, setEmpresasList] = useState<any[]>([]);
   const [contactsList, setContactsList] = useState<any[]>([]);
   const [oppsList, setOppsList] = useState<any[]>([]);
 
   // Modales
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createModalInitialData, setCreateModalInitialData] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [formActividad, setFormActividad] = useState({
-    id: null as number | null,
-    tipo: "Llamada",
-    asunto: "",
-    descripcion: "",
-    fecha_programada: "",
-    fecha_fin_programada: "",
-    prioridad: "Media",
-    trabajador_id: "",
-    contacto_id: "",
-    oportunidad_id: "",
-    venta_id: "",
-    pedido_id: "",
-  });
 
   // Modal Completar (Registrar lo que se hizo)
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
@@ -122,6 +113,7 @@ export default function ActividadesPage() {
       setLoading(true);
       const params = new URLSearchParams();
       if (filterTrabajador !== "all") params.append("trabajador_id", filterTrabajador);
+      if (filterEmpresa !== "all") params.append("empresa_id", filterEmpresa);
       if (filterTipo !== "all") params.append("tipo", filterTipo);
 
       const [resAct, resKpis] = await Promise.all([
@@ -141,10 +133,11 @@ export default function ActividadesPage() {
 
   const loadAuxData = async () => {
     try {
-      const [resStaff, resContacts, resOpps] = await Promise.allSettled([
+      const [resStaff, resContacts, resOpps, resEmp] = await Promise.allSettled([
         api.get("/api/payroll/staff"),
-        api.get("/api/contacts?limit=100"),
+        api.get("/api/contacts?limit=150"),
         api.get("/api/opportunities/kanban"),
+        api.get("/api/contacts/empresas"),
       ]);
 
       if (resStaff.status === "fulfilled") setStaffList(resStaff.value.data || []);
@@ -162,12 +155,13 @@ export default function ActividadesPage() {
         }
         setOppsList(allOpps);
       }
+      if (resEmp.status === "fulfilled") setEmpresasList(resEmp.value.data || []);
     } catch (ignored) {}
   };
 
   useEffect(() => {
     fetchData();
-  }, [filterTrabajador, filterTipo]);
+  }, [filterTrabajador, filterEmpresa, filterTipo]);
 
   useEffect(() => {
     loadAuxData();
@@ -176,42 +170,49 @@ export default function ActividadesPage() {
   // Filtrado en memoria
   const filteredActividades = useMemo(() => {
     return actividades.filter((a) => {
-      const fullText = `${a.asunto} ${a.contacto_nombre || ""} ${a.trabajador_nombre || ""} ${a.descripcion || ""}`.toLowerCase();
+      const fullText = `${a.asunto} ${a.empresa_razon_social || ""} ${a.contacto_nombre || ""} ${a.trabajador_nombre || ""} ${a.descripcion || ""}`.toLowerCase();
       const matchSearch = fullText.includes(searchTerm.toLowerCase());
 
       const matchContexto =
         filterContexto === "all" ||
+        (filterContexto === "empresa" && a.empresa_id) ||
         (filterContexto === "oportunidad" && a.oportunidad_id) ||
         (filterContexto === "venta" && a.venta_id) ||
         (filterContexto === "pedido" && a.pedido_id) ||
         (filterContexto === "contacto" && a.contacto_id && !a.oportunidad_id && !a.venta_id && !a.pedido_id) ||
-        (filterContexto === "interna" && !a.contacto_id && !a.oportunidad_id && !a.venta_id && !a.pedido_id);
+        (filterContexto === "interna" && !a.contacto_id && !a.empresa_id && !a.oportunidad_id && !a.venta_id && !a.pedido_id);
 
       return matchSearch && matchContexto;
     });
   }, [actividades, searchTerm, filterContexto]);
 
-  // Listas por pestañas de la vista Tablero
-  const nowStr = new Date().toISOString();
-  const todayDateStr = nowStr.split("T")[0];
+  // Listas por pestañas de la vista Tablero (usando hora local sin desfase UTC)
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const todayDateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const nowLocalStr = `${todayDateStr}T${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+
+  const listTodas = useMemo(() => {
+    return filteredActividades;
+  }, [filteredActividades]);
 
   const listHoy = useMemo(() => {
     return filteredActividades.filter(
-      (a) => a.estado === "Pendiente" && a.fecha_programada && a.fecha_programada.startsWith(todayDateStr)
+      (a) => a.estado === "Pendiente" && a.fecha_programada && a.fecha_programada.substring(0, 10) === todayDateStr
     );
   }, [filteredActividades, todayDateStr]);
 
   const listVencidas = useMemo(() => {
     return filteredActividades.filter(
-      (a) => a.estado === "Pendiente" && a.fecha_programada && a.fecha_programada < nowStr && !a.fecha_programada.startsWith(todayDateStr)
+      (a) => a.estado === "Pendiente" && a.fecha_programada && (a.fecha_programada < nowLocalStr && a.fecha_programada.substring(0, 10) !== todayDateStr)
     );
-  }, [filteredActividades, nowStr, todayDateStr]);
+  }, [filteredActividades, nowLocalStr, todayDateStr]);
 
   const listProgramadas = useMemo(() => {
     return filteredActividades.filter(
-      (a) => a.estado === "Pendiente" && a.fecha_programada && a.fecha_programada > nowStr && !a.fecha_programada.startsWith(todayDateStr)
+      (a) => a.estado === "Pendiente" && a.fecha_programada && a.fecha_programada.substring(0, 10) > todayDateStr
     );
-  }, [filteredActividades, nowStr, todayDateStr]);
+  }, [filteredActividades, todayDateStr]);
 
   const listHistorial = useMemo(() => {
     return filteredActividades.filter((a) => a.estado === "Completada");
@@ -227,12 +228,16 @@ export default function ActividadesPage() {
       else if (a.tipo === "Despacho" || a.tipo === "Cobranza") color = "#06b6d4"; // Celeste
       else if (a.tipo === "Tarea Interna") color = "#64748b"; // Gris
 
-      const isOverdue = a.estado === "Pendiente" && a.fecha_programada < nowStr;
+      const isOverdue = a.estado === "Pendiente" && a.fecha_programada < nowLocalStr;
       if (isOverdue) color = "#e11d48"; // Rojo alerta
+
+      const entidad = a.empresa_razon_social
+        ? `🏢 ${a.empresa_razon_social}${a.contacto_nombre ? ` (${a.contacto_nombre})` : ""}`
+        : (a.contacto_nombre ? `👤 ${a.contacto_nombre}` : "");
 
       return {
         id: String(a.id),
-        title: `${getIconEmoji(a.tipo)} ${a.asunto} ${a.contacto_nombre ? `(${a.contacto_nombre})` : ""}`,
+        title: `${getIconEmoji(a.tipo)} ${a.asunto} ${entidad ? `[${entidad}]` : ""}`,
         start: a.fecha_programada,
         end: a.fecha_fin_programada || undefined,
         backgroundColor: color,
@@ -241,7 +246,7 @@ export default function ActividadesPage() {
         extendedProps: { ...a, isOverdue },
       };
     });
-  }, [filteredActividades, nowStr]);
+  }, [filteredActividades, nowLocalStr]);
 
   function getIconEmoji(tipo: string) {
     switch (tipo) {
@@ -276,71 +281,16 @@ export default function ActividadesPage() {
   };
 
   // Abrir modal de creación
-  const handleOpenCreateModal = (dateStr?: string) => {
-    const defaultStart = dateStr
-      ? (dateStr.includes("T") ? dateStr.slice(0, 16) : `${dateStr}T10:00`)
-      : new Date().toISOString().slice(0, 16);
-
-    setFormActividad({
-      id: null,
-      tipo: "Llamada",
-      asunto: "",
-      descripcion: "",
+  const handleOpenCreateModal = (dateStr?: string, prefill?: any) => {
+    let defaultStart = "";
+    if (dateStr) {
+      defaultStart = dateStr.includes("T") ? dateStr.slice(0, 16) : `${dateStr}T10:00`;
+    }
+    setCreateModalInitialData({
       fecha_programada: defaultStart,
-      fecha_fin_programada: "",
-      prioridad: "Media",
-      trabajador_id: filterTrabajador !== "all" ? filterTrabajador : (staffList[0]?.id ? String(staffList[0].id) : ""),
-      contacto_id: "",
-      oportunidad_id: "",
-      venta_id: "",
-      pedido_id: "",
+      ...prefill,
     });
     setIsCreateModalOpen(true);
-  };
-
-  const handleSaveActividad = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formActividad.asunto.trim()) {
-      toast.error("Ingrese el asunto de la actividad.");
-      return;
-    }
-    if (!formActividad.fecha_programada) {
-      toast.error("Seleccione la fecha y hora programada.");
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      const payload: any = {
-        tipo: formActividad.tipo,
-        asunto: formActividad.asunto.trim(),
-        descripcion: formActividad.descripcion.trim(),
-        fecha_programada: formActividad.fecha_programada,
-        fecha_fin_programada: formActividad.fecha_fin_programada || null,
-        prioridad: formActividad.prioridad,
-        trabajador_id: formActividad.trabajador_id ? Number(formActividad.trabajador_id) : null,
-        contacto_id: formActividad.contacto_id ? Number(formActividad.contacto_id) : null,
-        oportunidad_id: formActividad.oportunidad_id ? Number(formActividad.oportunidad_id) : null,
-        venta_id: formActividad.venta_id ? Number(formActividad.venta_id) : null,
-        pedido_id: formActividad.pedido_id ? Number(formActividad.pedido_id) : null,
-      };
-
-      if (formActividad.id) {
-        await api.put(`/api/actividades/${formActividad.id}`, payload);
-        toast.success("Actividad actualizada correctamente.");
-      } else {
-        await api.post("/api/actividades", payload);
-        toast.success("Actividad programada exitosamente.");
-      }
-
-      setIsCreateModalOpen(false);
-      fetchData();
-    } catch (err: any) {
-      console.error("Error al guardar actividad:", err);
-      toast.error(err.response?.data?.message || "Error al guardar actividad.");
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   // Abrir modal de completar actividad
@@ -374,19 +324,17 @@ export default function ActividadesPage() {
 
       if (completeForm.programar_siguiente) {
         // Pre-cargar siguiente seguimiento con el mismo cliente y responsable
-        setFormActividad({
-          id: null,
+        setCreateModalInitialData({
           tipo: "Llamada",
           asunto: `Seguimiento: ${activityToComplete.asunto}`,
           descripcion: `Continuación de gestión previa: ${completeForm.resultado_notas.trim()}`,
           fecha_programada: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
-          fecha_fin_programada: "",
-          prioridad: "Media",
-          trabajador_id: activityToComplete.trabajador_id ? String(activityToComplete.trabajador_id) : "",
-          contacto_id: activityToComplete.contacto_id ? String(activityToComplete.contacto_id) : "",
-          oportunidad_id: activityToComplete.oportunidad_id ? String(activityToComplete.oportunidad_id) : "",
-          venta_id: activityToComplete.venta_id ? String(activityToComplete.venta_id) : "",
-          pedido_id: activityToComplete.pedido_id ? String(activityToComplete.pedido_id) : "",
+          trabajador_id: activityToComplete.trabajador_id || null,
+          contacto_id: activityToComplete.contacto_id || null,
+          empresa_id: activityToComplete.empresa_id || null,
+          oportunidad_id: activityToComplete.oportunidad_id || null,
+          venta_id: activityToComplete.venta_id || null,
+          pedido_id: activityToComplete.pedido_id || null,
         });
         setIsCreateModalOpen(true);
       }
@@ -428,42 +376,44 @@ export default function ActividadesPage() {
   };
 
   const renderBadgeContexto = (item: any) => {
-    if (item.oportunidad_id) {
-      return (
-        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-[11px] gap-1 font-medium">
-          <Sparkles className="size-3" />
-          <span>Oportunidad: {item.oportunidad_titulo || `#${item.oportunidad_id}`}</span>
-        </Badge>
-      );
-    }
-    if (item.venta_id) {
-      return (
-        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[11px] gap-1 font-medium">
-          <Award className="size-3" />
-          <span>Venta #{item.numero_venta || item.venta_id}</span>
-        </Badge>
-      );
-    }
-    if (item.pedido_id) {
-      return (
-        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[11px] gap-1 font-medium">
-          <Truck className="size-3" />
-          <span>Pedido #{item.numero_pedido || item.pedido_id}</span>
-        </Badge>
-      );
-    }
-    if (item.contacto_id) {
-      return (
-        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] gap-1 font-medium">
-          <Users className="size-3" />
-          <span>Cliente: {item.contacto_nombre}</span>
-        </Badge>
-      );
-    }
     return (
-      <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 text-[11px] font-medium">
-        Tarea Interna
-      </Badge>
+      <div className="flex flex-wrap items-center gap-1">
+        {item.empresa_razon_social && (
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] gap-1 font-medium">
+            <Building className="size-3 text-blue-600" />
+            <span>Empresa: {item.empresa_razon_social}</span>
+          </Badge>
+        )}
+        {item.contacto_nombre && (
+          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] gap-1 font-medium">
+            <Users className="size-3 text-emerald-600" />
+            <span>{item.empresa_razon_social ? "Contacto: " : "Cliente: "}{item.contacto_nombre}</span>
+          </Badge>
+        )}
+        {item.oportunidad_id && (
+          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-[11px] gap-1 font-medium">
+            <Sparkles className="size-3 text-purple-600" />
+            <span>Oportunidad: {item.oportunidad_titulo || `#${item.oportunidad_id}`}</span>
+          </Badge>
+        )}
+        {item.venta_id && (
+          <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[11px] gap-1 font-medium">
+            <Award className="size-3 text-indigo-600" />
+            <span>Venta #{item.numero_venta || item.venta_id}</span>
+          </Badge>
+        )}
+        {item.pedido_id && (
+          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[11px] gap-1 font-medium">
+            <Truck className="size-3 text-amber-600" />
+            <span>Pedido #{item.numero_pedido || item.pedido_id}</span>
+          </Badge>
+        )}
+        {!item.empresa_razon_social && !item.contacto_nombre && !item.oportunidad_id && !item.venta_id && !item.pedido_id && (
+          <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 text-[11px] font-medium">
+            Tarea Interna
+          </Badge>
+        )}
+      </div>
     );
   };
 
@@ -622,6 +572,20 @@ export default function ActividadesPage() {
               />
             </div>
 
+            {/* Filtro Empresa */}
+            <select
+              value={filterEmpresa}
+              onChange={(e) => setFilterEmpresa(e.target.value)}
+              className="h-8 text-xs bg-card border rounded-md px-2.5 font-medium cursor-pointer max-w-[200px]"
+            >
+              <option value="all">🏢 Todas las Empresas</option>
+              {empresasList.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  🏢 {emp.razonSocial || emp.nombreDisplay || `Empresa #${emp.id}`}
+                </option>
+              ))}
+            </select>
+
             {/* Filtro Colaborador */}
             <select
               value={filterTrabajador}
@@ -754,8 +718,9 @@ export default function ActividadesPage() {
               headerToolbar={false}
               height="auto"
               locale="es"
-              slotMinTime="07:00:00"
-              slotMaxTime="20:00:00"
+              slotMinTime="06:00:00"
+              slotMaxTime="23:00:00"
+              scrollTime="08:00:00"
               allDaySlot={false}
               events={calendarEvents}
               editable={true}
@@ -792,6 +757,16 @@ export default function ActividadesPage() {
           <CardHeader className="p-4 border-b">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-1.5 bg-muted/60 p-1 rounded-lg border text-xs">
+                <button
+                  onClick={() => setActiveTab("todas")}
+                  className={`px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1.5 ${
+                    activeTab === "todas" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <ListTodo className="size-3.5 text-primary" />
+                  <span>Todas</span>
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1 font-bold">{listTodas.length}</Badge>
+                </button>
                 <button
                   onClick={() => setActiveTab("hoy")}
                   className={`px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1.5 ${
@@ -859,12 +834,13 @@ export default function ActividadesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody className="text-xs">
-                  {(activeTab === "hoy" ? listHoy :
+                  {(activeTab === "todas" ? listTodas :
+                    activeTab === "hoy" ? listHoy :
                     activeTab === "vencidas" ? listVencidas :
                     activeTab === "programadas" ? listProgramadas : listHistorial
                   ).map((item) => {
                     const isDone = item.estado === "Completada";
-                    const isOverdue = item.estado === "Pendiente" && item.fecha_programada < nowStr;
+                    const isOverdue = item.estado === "Pendiente" && item.fecha_programada < nowLocalStr;
 
                     return (
                       <TableRow key={item.id} className={`hover:bg-muted/20 ${isOverdue ? "bg-rose-50/20" : ""}`}>
@@ -1097,185 +1073,12 @@ export default function ActividadesPage() {
       )}
 
       {/* MODAL 1: PLANIFICAR ACTIVIDAD */}
-      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-foreground">
-              <CalendarCheck className="size-5 text-primary" />
-              <span>{formActividad.id ? "Editar Actividad" : "Planificar Nueva Actividad"}</span>
-            </DialogTitle>
-            <DialogDescription>
-              Programa una llamada, reunión o seguimiento comercial/operativo en la agenda.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSaveActividad} className="flex flex-col gap-3.5 py-1 text-xs">
-            <div>
-              <label className="font-semibold text-foreground mb-1 block">
-                Asunto de la Actividad *
-              </label>
-              <Input
-                required
-                placeholder="Ej: Llamada para confirmar firma de contrato Fibra 100M"
-                value={formActividad.asunto}
-                onChange={(e) => setFormActividad({ ...formActividad, asunto: e.target.value })}
-                className="text-xs h-9"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-semibold text-foreground mb-1 block">
-                  Tipo de Actividad *
-                </label>
-                <select
-                  value={formActividad.tipo}
-                  onChange={(e) => setFormActividad({ ...formActividad, tipo: e.target.value })}
-                  className="w-full h-9 bg-card border rounded-md px-2.5 font-medium"
-                >
-                  <option value="Llamada">📞 Llamada Telefónica</option>
-                  <option value="WhatsApp">💬 Mensaje / WhatsApp</option>
-                  <option value="Reunión Presencial">🟣 Reunión Presencial</option>
-                  <option value="Videollamada">💻 Videollamada / Demo</option>
-                  <option value="Visita Técnica">🛠️ Visita Técnica / Instalación</option>
-                  <option value="Envío de Cotización">📄 Envío de Cotización</option>
-                  <option value="Cobranza">💰 Cobranza / Pago</option>
-                  <option value="Tarea Interna">📌 Tarea Interna</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-semibold text-foreground mb-1 block">
-                  Prioridad
-                </label>
-                <select
-                  value={formActividad.prioridad}
-                  onChange={(e) => setFormActividad({ ...formActividad, prioridad: e.target.value })}
-                  className="w-full h-9 bg-card border rounded-md px-2.5 font-medium"
-                >
-                  <option value="Baja">Baja</option>
-                  <option value="Media">Media</option>
-                  <option value="Alta">Alta</option>
-                  <option value="Urgente">Urgente</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-semibold text-foreground mb-1 block">
-                  Fecha y Hora de Inicio *
-                </label>
-                <Input
-                  type="datetime-local"
-                  required
-                  value={formActividad.fecha_programada}
-                  onChange={(e) => setFormActividad({ ...formActividad, fecha_programada: e.target.value })}
-                  className="text-xs h-9 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-foreground mb-1 block">
-                  Hora de Fin (Opcional)
-                </label>
-                <Input
-                  type="datetime-local"
-                  value={formActividad.fecha_fin_programada}
-                  onChange={(e) => setFormActividad({ ...formActividad, fecha_fin_programada: e.target.value })}
-                  className="text-xs h-9 font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-semibold text-foreground mb-1 block">
-                  Responsable Asignado
-                </label>
-                <select
-                  value={formActividad.trabajador_id}
-                  onChange={(e) => setFormActividad({ ...formActividad, trabajador_id: e.target.value })}
-                  className="w-full h-9 bg-card border rounded-md px-2.5 font-medium"
-                >
-                  <option value="">-- Sin Asignar --</option>
-                  {staffList.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nombre} {s.apellido || ""} ({s.rol_operativo})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="font-semibold text-foreground mb-1 block">
-                  Cliente / Contacto Asociado
-                </label>
-                <select
-                  value={formActividad.contacto_id}
-                  onChange={(e) => setFormActividad({ ...formActividad, contacto_id: e.target.value })}
-                  className="w-full h-9 bg-card border rounded-md px-2.5 font-medium"
-                >
-                  <option value="">-- Independiente (Sin Cliente) --</option>
-                  {contactsList.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.razon_social || `${c.nombres || ""} ${c.apellidos || ""}`.trim() || c.nombre || `ID #${c.id}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Oportunidad asociada */}
-            <div>
-              <label className="font-semibold text-foreground mb-1 block">
-                Oportunidad Comercial (Opcional)
-              </label>
-              <select
-                value={formActividad.oportunidad_id}
-                onChange={(e) => setFormActividad({ ...formActividad, oportunidad_id: e.target.value })}
-                className="w-full h-9 bg-card border rounded-md px-2.5 font-medium"
-              >
-                <option value="">-- Ninguna --</option>
-                {oppsList.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.titulo} (S/ {o.valor || 0})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="font-semibold text-foreground mb-1 block">
-                Descripción / Instrucciones
-              </label>
-              <textarea
-                rows={2}
-                placeholder="Detalle o notas de preparación para la gestión..."
-                value={formActividad.descripcion}
-                onChange={(e) => setFormActividad({ ...formActividad, descripcion: e.target.value })}
-                className="w-full text-xs bg-card border rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCreateModalOpen(false)}
-                disabled={isSaving}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" size="sm" disabled={isSaving} className="gap-1.5">
-                {isSaving ? <RefreshCw className="size-4 animate-spin" /> : <CalendarCheck className="size-4" />}
-                <span>Guardar Actividad</span>
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ModalCrearActividad
+        open={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+        onSuccess={fetchData}
+        initialData={createModalInitialData}
+      />
 
       {/* MODAL 2: COMPLETAR ACTIVIDAD (REGISTRAR LO QUE SE HIZO) */}
       <Dialog open={isCompleteModalOpen} onOpenChange={setIsCompleteModalOpen}>

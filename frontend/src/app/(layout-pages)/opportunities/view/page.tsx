@@ -77,10 +77,12 @@ import {
   UserCheck,
   Briefcase,
   ShieldCheck,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { OpportunityWhatsAppModal } from "@/components/opportunities/OpportunityWhatsAppModal";
+import { ModalCrearActividad } from "@/components/actividades/ModalCrearActividad";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import {
   OpportunityWhatsAppParams,
@@ -125,6 +127,9 @@ interface Opportunity {
   equipo_nombre?: string | null;
   telefono_movil?: string | null;
   contacto_email?: string | null;
+  contacto_nombre?: string | null;
+  empresa_id?: number | null;
+  empresa_razon_social?: string | null;
   tipo_propuesta?: string | null;
   moneda?: string | null;
   total_instalacion?: number | null;
@@ -166,6 +171,10 @@ export default function OpportunitiesKanbanPage() {
   // WhatsApp Share State
   const [selectedOppForWhatsApp, setSelectedOppForWhatsApp] = useState<Opportunity | null>(null);
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+
+  // Actividades State
+  const [selectedOppForActividad, setSelectedOppForActividad] = useState<Opportunity | null>(null);
+  const [actividadModalOpen, setActividadModalOpen] = useState(false);
 
   const getOpportunityWhatsAppParams = (opp: Opportunity): OpportunityWhatsAppParams => {
     let itemsParsed: any[] = [];
@@ -1550,6 +1559,17 @@ export default function OpportunitiesKanbanPage() {
                                   <DropdownMenuItem
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      setSelectedOppForActividad(opp);
+                                      setActividadModalOpen(true);
+                                    }}
+                                    className="cursor-pointer text-xs text-blue-700 font-medium"
+                                  >
+                                    <CalendarClock className="size-3.5 mr-1.5" />
+                                    Programar Actividad
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       handleOpenWhatsAppModal(opp);
                                     }}
                                     className="cursor-pointer text-xs text-emerald-700 font-medium"
@@ -1630,17 +1650,31 @@ export default function OpportunitiesKanbanPage() {
                                   <Phone className="size-2.5 text-muted-foreground" />
                                   {opp.telefono_movil || "Sin teléfono"}
                                 </span>
-                                <button
-                                  type="button"
-                                  className="text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 text-[10px] shrink-0 hover:underline cursor-pointer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenWhatsAppModal(opp);
-                                  }}
-                                  title="Ver, copiar y enviar todos los detalles de la oportunidad por WhatsApp"
-                                >
-                                  <MessageSquare className="size-2.5" /> WhatsApp
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    className="text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 text-[10px] shrink-0 hover:underline cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedOppForActividad(opp);
+                                      setActividadModalOpen(true);
+                                    }}
+                                    title="Programar una llamada, reunión o seguimiento en la agenda"
+                                  >
+                                    <CalendarClock className="size-2.5" /> Actividad
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 text-[10px] shrink-0 hover:underline cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenWhatsAppModal(opp);
+                                    }}
+                                    title="Ver, copiar y enviar todos los detalles de la oportunidad por WhatsApp"
+                                  >
+                                    <MessageSquare className="size-2.5" /> WhatsApp
+                                  </button>
+                                </div>
                               </div>
                             </div>
 
@@ -2078,6 +2112,18 @@ export default function OpportunitiesKanbanPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-7 w-7 text-blue-600 hover:bg-blue-50"
+                              onClick={() => {
+                                setSelectedOppForActividad(opp);
+                                setActividadModalOpen(true);
+                              }}
+                              title="Programar Actividad / Seguimiento"
+                            >
+                              <CalendarClock className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
                               onClick={() => handleOpenWhatsAppModal(opp)}
                               title="Compartir y enviar detalles por WhatsApp"
@@ -2371,6 +2417,25 @@ export default function OpportunitiesKanbanPage() {
         onOpenChange={setWhatsAppModalOpen}
         data={selectedOppForWhatsApp ? getOpportunityWhatsAppParams(selectedOppForWhatsApp) : {}}
       />
+
+      {/* Modal para programar actividad vinculada a la oportunidad */}
+      {selectedOppForActividad && (
+        <ModalCrearActividad
+          open={actividadModalOpen}
+          onOpenChange={setActividadModalOpen}
+          onSuccess={() => {
+            toast.success(`Actividad programada para oportunidad #${selectedOppForActividad.id}`);
+          }}
+          initialData={{
+            oportunidad_id: selectedOppForActividad.id,
+            oportunidad_titulo: selectedOppForActividad.titulo,
+            contacto_id: selectedOppForActividad.contacto_id || null,
+            contacto_nombre: selectedOppForActividad.contacto_nombre_completo || selectedOppForActividad.contacto_persona || selectedOppForActividad.contacto_nombre || undefined,
+            empresa_id: selectedOppForActividad.empresa_id || null,
+            asunto: `Seguimiento: ${selectedOppForActividad.titulo}`,
+          }}
+        />
+      )}
     </div>
   );
 }

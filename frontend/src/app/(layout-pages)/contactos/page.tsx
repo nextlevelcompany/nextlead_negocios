@@ -62,10 +62,12 @@ import {
   Sparkles,
   CheckCircle2,
   FileSpreadsheet,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { ImportContactsExcelModal } from "@/components/contactos/ImportContactsExcelModal";
+import { ModalCrearActividad } from "@/components/actividades/ModalCrearActividad";
 
 interface Direccion {
   idDireccion?: number;
@@ -144,6 +146,9 @@ export default function ContactsDirectoryPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [contactOrders, setContactOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [contactActivities, setContactActivities] = useState<any[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [isActividadModalOpen, setIsActividadModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
 
   // Usuario activo y permisos de alcance
@@ -306,13 +311,41 @@ export default function ContactsDirectoryPage() {
     setSelectedContact(contact);
     setShowDetailModal(true);
     setLoadingOrders(true);
+    setLoadingActivities(true);
+
+    const isEmp = contact.tipoPersona === "EMPRESA";
     try {
-      const res = await api.get(`/api/contacts/${contact.id}/pedidos`);
-      setContactOrders(res.data?.pedidos || res.data || []);
-    } catch (err) {
-      setContactOrders([]);
+      const [resOrders, resAct] = await Promise.allSettled([
+        api.get(`/api/contacts/${contact.id}/pedidos`),
+        api.get(`/api/actividades?${isEmp ? `empresa_id=${contact.id}` : `contacto_id=${contact.id}`}`),
+      ]);
+
+      if (resOrders.status === "fulfilled") {
+        setContactOrders(resOrders.value.data?.pedidos || resOrders.value.data || []);
+      } else {
+        setContactOrders([]);
+      }
+
+      if (resAct.status === "fulfilled") {
+        setContactActivities(resAct.value.data || []);
+      } else {
+        setContactActivities([]);
+      }
     } finally {
       setLoadingOrders(false);
+      setLoadingActivities(false);
+    }
+  };
+
+  const reloadContactActivities = async (contactId: number, isEmp: boolean) => {
+    try {
+      setLoadingActivities(true);
+      const res = await api.get(`/api/actividades?${isEmp ? `empresa_id=${contactId}` : `contacto_id=${contactId}`}`);
+      setContactActivities(res.data || []);
+    } catch {
+      setContactActivities([]);
+    } finally {
+      setLoadingActivities(false);
     }
   };
 
@@ -1187,6 +1220,97 @@ export default function ContactsDirectoryPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Bitácora y Actividades de la Empresa / Contacto */}
+                <div className="flex flex-col gap-2 pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5">
+                      <CalendarClock className="size-3.5 text-blue-600" />
+                      {selectedContact.tipoPersona === "EMPRESA" ? "Actividades de la Empresa" : "Actividades del Contacto"}
+                      <Badge variant="secondary" className="text-[10px] h-4 px-1 font-bold">
+                        {contactActivities.length}
+                      </Badge>
+                    </span>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[11px] gap-1 text-primary border-primary/30 hover:bg-primary/5 cursor-pointer"
+                      onClick={() => setIsActividadModalOpen(true)}
+                    >
+                      <CalendarClock className="size-3" />
+                      <span>+ Programar Actividad</span>
+                    </Button>
+                  </div>
+
+                  {loadingActivities ? (
+                    <div className="p-4 text-center text-muted-foreground flex items-center justify-center gap-2">
+                      <RefreshCw className="size-4 animate-spin text-primary" />
+                      <span>Cargando actividades...</span>
+                    </div>
+                  ) : contactActivities.length === 0 ? (
+                    <div className="p-3 border rounded text-muted-foreground text-center flex flex-col items-center gap-1.5">
+                      <p>No registra actividades programadas aún.</p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-primary h-6"
+                        onClick={() => setIsActividadModalOpen(true)}
+                      >
+                        Planificar primera gestión
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
+                      {contactActivities.map((act: any) => {
+                        const isDone = act.estado === "Completada";
+                        return (
+                          <div
+                            key={act.id}
+                            className={`p-2 rounded border text-[11px] flex flex-col gap-1 ${
+                              isDone ? "bg-muted/10 border-border/60" : "bg-card border-border"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-foreground flex items-center gap-1.5">
+                                <span>{act.tipo === "WhatsApp" ? "💬" : act.tipo === "Llamada" ? "📞" : "📌"}</span>
+                                <span>{act.asunto}</span>
+                              </span>
+                              <Badge
+                                variant={isDone ? "secondary" : "outline"}
+                                className={`text-[9px] ${
+                                  isDone ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
+                                }`}
+                              >
+                                {act.estado}
+                              </Badge>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                              <span>📅 {act.fecha_programada ? act.fecha_programada.replace("T", " ").slice(0, 16) : "-"}</span>
+                              {act.trabajador_nombre && <span>Asignado: {act.trabajador_nombre}</span>}
+                            </div>
+
+                            {act.descripcion && (
+                              <p className="text-[10px] text-muted-foreground line-clamp-2 italic">
+                                {act.descripcion}
+                              </p>
+                            )}
+
+                            {isDone && act.resultado_notas && (
+                              <div className="bg-emerald-50/50 border border-emerald-100 rounded p-1 text-[10px] text-emerald-800">
+                                <span className="font-semibold">Resultado ({act.resultado_estado || "Completado"}): </span>
+                                {act.resultado_notas}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <DialogFooter className="flex items-center justify-between border-t pt-3">
@@ -1234,6 +1358,26 @@ export default function ContactsDirectoryPage() {
           loadContacts();
         }}
       />
+
+      {/* Modal Programar Actividad vinculado a la Empresa o Contacto */}
+      {selectedContact && (
+        <ModalCrearActividad
+          open={isActividadModalOpen}
+          onOpenChange={setIsActividadModalOpen}
+          onSuccess={() => {
+            reloadContactActivities(
+              selectedContact.id,
+              selectedContact.tipoPersona === "EMPRESA"
+            );
+          }}
+          initialData={{
+            empresa_id: selectedContact.tipoPersona === "EMPRESA" ? selectedContact.id : (selectedContact.empresaId || null),
+            empresa_nombre: selectedContact.tipoPersona === "EMPRESA" ? (selectedContact.razonSocial || selectedContact.nombreDisplay) : undefined,
+            contacto_id: selectedContact.tipoPersona === "NATURAL" ? selectedContact.id : null,
+            contacto_nombre: selectedContact.tipoPersona === "NATURAL" ? selectedContact.nombreDisplay : undefined,
+          }}
+        />
+      )}
     </div>
   );
 }

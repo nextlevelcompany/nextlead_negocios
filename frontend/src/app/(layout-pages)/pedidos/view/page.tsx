@@ -6,6 +6,7 @@ import api from "@/lib/api";
 import { useRolePermissions } from "@/lib/permissions";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
+import { ModalCrearActividad } from "@/components/actividades/ModalCrearActividad";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -58,6 +59,7 @@ import {
   Filter,
   X,
   RotateCcw,
+  CalendarClock,
 } from "lucide-react";
 
 export default function PedidosViewPage() {
@@ -78,6 +80,10 @@ export default function PedidosViewPage() {
 
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
+
+  // Actividades Modal State
+  const [selectedPedidoForActividad, setSelectedPedidoForActividad] = useState<any | null>(null);
+  const [actividadModalOpen, setActividadModalOpen] = useState(false);
 
   // Filters state
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(true);
@@ -948,6 +954,16 @@ export default function PedidosViewPage() {
                                       </DropdownMenuItem>
                                     ))}
                                   <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedPedidoForActividad(pedido);
+                                      setActividadModalOpen(true);
+                                    }}
+                                    className="cursor-pointer text-blue-700 font-medium text-xs"
+                                  >
+                                    <CalendarClock className="size-3.5 mr-2 text-blue-600" />
+                                    Programar Actividad / Despacho
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem asChild>
                                     <Link href={`/pedidos/create?edit_id=${pedido.id}`} className="cursor-pointer">
                                       <Edit className="size-3.5 mr-2" />
@@ -1209,6 +1225,18 @@ export default function PedidosViewPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-7 w-7 text-blue-600 hover:bg-blue-50"
+                              onClick={() => {
+                                setSelectedPedidoForActividad(pedido);
+                                setActividadModalOpen(true);
+                              }}
+                              title="Programar Actividad / Despacho"
+                            >
+                              <CalendarClock className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-7 w-7 text-emerald-600"
                               onClick={() => shareWhatsApp(pedido)}
                               title="Compartir por WhatsApp"
@@ -1420,6 +1448,26 @@ export default function PedidosViewPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Programar Actividad vinculado a Pedido */}
+      {selectedPedidoForActividad && (
+        <ModalCrearActividad
+          open={actividadModalOpen}
+          onOpenChange={setActividadModalOpen}
+          onSuccess={() => {
+            toast.success(`Actividad programada para el pedido #${selectedPedidoForActividad.numero_pedido || selectedPedidoForActividad.id}`);
+          }}
+          initialData={{
+            pedido_id: selectedPedidoForActividad.id,
+            pedido_numero: selectedPedidoForActividad.numero_pedido || `#${selectedPedidoForActividad.id}`,
+            contacto_id: selectedPedidoForActividad.contacto_id || null,
+            contacto_nombre: selectedPedidoForActividad.contacto_nombre || selectedPedidoForActividad.cliente_nombre,
+            empresa_id: selectedPedidoForActividad.empresa_id || null,
+            asunto: `Despacho / Seguimiento: Pedido #${selectedPedidoForActividad.numero_pedido || selectedPedidoForActividad.id}`,
+            tipo: "Despacho",
+          }}
+        />
+      )}
     </div>
   );
 }

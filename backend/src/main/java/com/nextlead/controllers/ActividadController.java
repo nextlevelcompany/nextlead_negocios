@@ -72,6 +72,7 @@ public class ActividadController {
         @RequestParam(value = "estado", required = false) String estado,
         @RequestParam(value = "tipo", required = false) String tipo,
         @RequestParam(value = "trabajador_id", required = false) Long trabajadorId,
+        @RequestParam(value = "empresa_id", required = false) Long empresaId,
         @RequestParam(value = "contacto_id", required = false) Long contactoId,
         @RequestParam(value = "oportunidad_id", required = false) Long oportunidadId,
         @RequestParam(value = "venta_id", required = false) Long ventaId,
@@ -85,11 +86,22 @@ public class ActividadController {
             Integer authUsuarioId = (Integer) scopeData[0];
             Long authTrabajadorId = (Long) scopeData[1];
             String scope = (String) scopeData[2];
+            String username = (String) scopeData[3];
 
             StringBuilder sql = new StringBuilder(
-                "SELECT a.*, " +
+                "SELECT a.id, a.tipo, a.asunto, a.descripcion, " +
+                "  to_char(a.fecha_programada, 'YYYY-MM-DD\"T\"HH24:MI:SS') as fecha_programada, " +
+                "  to_char(a.fecha_fin_programada, 'YYYY-MM-DD\"T\"HH24:MI:SS') as fecha_fin_programada, " +
+                "  a.prioridad, a.estado, " +
+                "  to_char(a.fecha_ejecutada, 'YYYY-MM-DD\"T\"HH24:MI:SS') as fecha_ejecutada, " +
+                "  a.resultado_notas, a.resultado_estado, a.duracion_minutos, " +
+                "  a.contacto_id, a.empresa_id, a.oportunidad_id, a.venta_id, a.pedido_id, " +
+                "  a.trabajador_id, a.usuario_id, a.creado_por, " +
+                "  to_char(a.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS') as created_at, " +
                 "  COALESCE(c.razon_social, TRIM(CONCAT(c.nombres, ' ', COALESCE(c.apellidos, '')))) as contacto_nombre, " +
                 "  c.telefono_principal as contacto_telefono, c.email as contacto_correo, " +
+                "  c.tipo_persona as contacto_tipo_persona, " +
+                "  e.razon_social as empresa_razon_social, " +
                 "  o.titulo as oportunidad_titulo, o.valor as oportunidad_valor, " +
                 "  v.numero_venta, v.total as venta_total, " +
                 "  p.numero_pedido, p.total as pedido_total, " +
@@ -97,6 +109,7 @@ public class ActividadController {
                 "  t.rol_operativo as trabajador_rol " +
                 "FROM crm_actividades a " +
                 "LEFT JOIN contacts c ON a.contacto_id = c.id " +
+                "LEFT JOIN contacts e ON a.empresa_id = e.id " +
                 "LEFT JOIN oportunidades o ON a.oportunidad_id = o.id " +
                 "LEFT JOIN ventas v ON a.venta_id = v.id " +
                 "LEFT JOIN pedidos p ON a.pedido_id = p.id " +
@@ -105,20 +118,23 @@ public class ActividadController {
             );
             List<Object> params = new ArrayList<>();
 
-            // Role Scope Enforcement (if not explicitly querying or if restricted)
+            // Role Scope Enforcement
             if ("own".equals(scope)) {
                 if (authTrabajadorId != null) {
-                    sql.append("AND (a.trabajador_id = ? OR (a.trabajador_id IS NULL AND a.usuario_id = ?)) ");
+                    sql.append("AND (a.trabajador_id = ? OR (a.trabajador_id IS NULL AND a.usuario_id = ?) OR a.creado_por = ?) ");
                     params.add(authTrabajadorId);
                     params.add(authUsuarioId != null ? authUsuarioId : -1);
+                    params.add(username);
                 } else if (authUsuarioId != null) {
-                    sql.append("AND a.usuario_id = ? ");
+                    sql.append("AND (a.usuario_id = ? OR a.creado_por = ?) ");
                     params.add(authUsuarioId);
+                    params.add(username);
                 }
             } else if ("team".equals(scope) && authTrabajadorId != null) {
-                sql.append("AND (a.trabajador_id = ? OR t.supervisor_id = ?) ");
+                sql.append("AND (a.trabajador_id = ? OR t.supervisor_id = ? OR a.creado_por = ?) ");
                 params.add(authTrabajadorId);
                 params.add(authTrabajadorId);
+                params.add(username);
             }
 
             // User Filters
@@ -127,20 +143,11 @@ public class ActividadController {
                 params.add(trabajadorId);
             }
 
-            if (estado != null && !estado.trim().isEmpty() && !"all".equalsIgnoreCase(estado)) {
-                if ("hoy".equalsIgnoreCase(estado)) {
-                    sql.append("AND a.fecha_programada::date = CURRENT_DATE ");
-                } else if ("vencida".equalsIgnoreCase(estado) || "vencidas".equalsIgnoreCase(estado)) {
-                    sql.append("AND a.estado = 'Pendiente' AND a.fecha_programada < NOW() ");
-                } else {
-                    sql.append("AND LOWER(a.estado) = LOWER(?) ");
-                    params.add(estado.trim());
-                }
-            }
-
-            if (tipo != null && !tipo.trim().isEmpty() && !"all".equalsIgnoreCase(tipo)) {
-                sql.append("AND LOWER(a.tipo) = LOWER(?) ");
-                params.add(tipo.trim());
+            if (empresaId != null) {
+                sql.append("AND (a.empresa_id = ? OR a.contacto_id = ? OR a.contacto_id IN (SELECT id FROM contacts WHERE empresa_id = ?)) ");
+                params.add(empresaId);
+                params.add(empresaId);
+                params.add(empresaId);
             }
 
             if (contactoId != null) {
@@ -163,6 +170,22 @@ public class ActividadController {
                 params.add(pedidoId);
             }
 
+            if (estado != null && !estado.trim().isEmpty() && !"all".equalsIgnoreCase(estado)) {
+                if ("hoy".equalsIgnoreCase(estado)) {
+                    sql.append("AND a.fecha_programada::date = CURRENT_DATE ");
+                } else if ("vencida".equalsIgnoreCase(estado) || "vencidas".equalsIgnoreCase(estado)) {
+                    sql.append("AND a.estado = 'Pendiente' AND a.fecha_programada < NOW() ");
+                } else {
+                    sql.append("AND LOWER(a.estado) = LOWER(?) ");
+                    params.add(estado.trim());
+                }
+            }
+
+            if (tipo != null && !tipo.trim().isEmpty() && !"all".equalsIgnoreCase(tipo)) {
+                sql.append("AND LOWER(a.tipo) = LOWER(?) ");
+                params.add(tipo.trim());
+            }
+
             if (desde != null && !desde.trim().isEmpty()) {
                 sql.append("AND a.fecha_programada >= ?::timestamp ");
                 params.add(desde.trim().contains("T") ? desde.trim().replace("T", " ") : desde.trim() + " 00:00:00");
@@ -175,7 +198,8 @@ public class ActividadController {
 
             if (search != null && !search.trim().isEmpty()) {
                 String term = "%" + search.trim().toLowerCase() + "%";
-                sql.append("AND (LOWER(a.asunto) LIKE ? OR LOWER(COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos), '')) LIKE ? OR LOWER(COALESCE(a.descripcion, '')) LIKE ?) ");
+                sql.append("AND (LOWER(a.asunto) LIKE ? OR LOWER(COALESCE(c.razon_social, CONCAT(c.nombres, ' ', c.apellidos), '')) LIKE ? OR LOWER(COALESCE(e.razon_social, '')) LIKE ? OR LOWER(COALESCE(a.descripcion, '')) LIKE ?) ");
+                params.add(term);
                 params.add(term);
                 params.add(term);
                 params.add(term);
@@ -276,15 +300,25 @@ public class ActividadController {
     public ResponseEntity<?> getActividadById(@PathVariable Long id) {
         try {
             List<Map<String, Object>> list = jdbcTemplate.queryForList(
-                "SELECT a.*, " +
+                "SELECT a.id, a.tipo, a.asunto, a.descripcion, " +
+                "  to_char(a.fecha_programada, 'YYYY-MM-DD\"T\"HH24:MI:SS') as fecha_programada, " +
+                "  to_char(a.fecha_fin_programada, 'YYYY-MM-DD\"T\"HH24:MI:SS') as fecha_fin_programada, " +
+                "  a.prioridad, a.estado, " +
+                "  to_char(a.fecha_ejecutada, 'YYYY-MM-DD\"T\"HH24:MI:SS') as fecha_ejecutada, " +
+                "  a.resultado_notas, a.resultado_estado, a.duracion_minutos, " +
+                "  a.contacto_id, a.empresa_id, a.oportunidad_id, a.venta_id, a.pedido_id, " +
+                "  a.trabajador_id, a.usuario_id, a.creado_por, " +
+                "  to_char(a.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS') as created_at, " +
                 "  COALESCE(c.razon_social, TRIM(CONCAT(c.nombres, ' ', COALESCE(c.apellidos, '')))) as contacto_nombre, " +
                 "  c.telefono_principal as contacto_telefono, c.email as contacto_correo, " +
+                "  e.razon_social as empresa_razon_social, " +
                 "  o.titulo as oportunidad_titulo, " +
                 "  v.numero_venta, " +
                 "  p.numero_pedido, " +
                 "  TRIM(CONCAT(t.nombre, ' ', COALESCE(t.apellido, ''))) as trabajador_nombre " +
                 "FROM crm_actividades a " +
                 "LEFT JOIN contacts c ON a.contacto_id = c.id " +
+                "LEFT JOIN contacts e ON a.empresa_id = e.id " +
                 "LEFT JOIN oportunidades o ON a.oportunidad_id = o.id " +
                 "LEFT JOIN ventas v ON a.venta_id = v.id " +
                 "LEFT JOIN pedidos p ON a.pedido_id = p.id " +
@@ -333,13 +367,34 @@ public class ActividadController {
             Long trabajadorId = req.trabajador_id != null ? req.trabajador_id : authTrabajadorId;
             Integer usuarioId = req.usuario_id != null ? req.usuario_id : authUsuarioId;
 
+            Long empresaId = req.empresa_id;
+            Long contactoId = req.contacto_id;
+
+            // Si el contacto seleccionado es una EMPRESA directamente, vincularlo como empresa_id
+            if (contactoId != null) {
+                try {
+                    String tipoPersona = jdbcTemplate.queryForObject(
+                        "SELECT tipo_persona FROM contacts WHERE id = ?", String.class, contactoId);
+                    if ("EMPRESA".equalsIgnoreCase(tipoPersona)) {
+                        if (empresaId == null) empresaId = contactoId;
+                    } else if (empresaId == null) {
+                        // Si es persona natural, verificar si pertenece a alguna empresa
+                        try {
+                            Long empPadre = jdbcTemplate.queryForObject(
+                                "SELECT empresa_id FROM contacts WHERE id = ?", Long.class, contactoId);
+                            if (empPadre != null) empresaId = empPadre;
+                        } catch (Exception ignored) {}
+                    }
+                } catch (Exception ignored) {}
+            }
+
             jdbcTemplate.update(
                 "INSERT INTO crm_actividades (" +
                 "  tipo, asunto, descripcion, fecha_programada, fecha_fin_programada, prioridad, estado, " +
-                "  contacto_id, oportunidad_id, venta_id, pedido_id, trabajador_id, usuario_id, creado_por" +
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "  empresa_id, contacto_id, oportunidad_id, venta_id, pedido_id, trabajador_id, usuario_id, creado_por" +
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 tipo, req.asunto.trim(), req.descripcion, fechaProg, fechaFin, prioridad, estado,
-                req.contacto_id, req.oportunidad_id, req.venta_id, req.pedido_id, trabajadorId, usuarioId, username
+                empresaId, contactoId, req.oportunidad_id, req.venta_id, req.pedido_id, trabajadorId, usuarioId, username
             );
             Long newId = jdbcTemplate.queryForObject("SELECT lastval()", Long.class);
 
@@ -399,6 +454,10 @@ public class ActividadController {
             if (req.estado != null) {
                 updateSql.append(", estado = ?");
                 params.add(req.estado.trim());
+            }
+            if (req.empresa_id != null) {
+                updateSql.append(", empresa_id = ?");
+                params.add(req.empresa_id);
             }
             if (req.trabajador_id != null) {
                 updateSql.append(", trabajador_id = ?");
@@ -513,6 +572,7 @@ public class ActividadController {
         public String fecha_fin_programada;
         public String prioridad;
         public String estado;
+        public Long empresa_id;
         public Long contacto_id;
         public Long oportunidad_id;
         public Long venta_id;

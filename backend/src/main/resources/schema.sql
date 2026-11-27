@@ -1047,6 +1047,7 @@ CREATE TABLE IF NOT EXISTS crm_actividades (
     resultado_estado VARCHAR(50),
     duracion_minutos INT,
     contacto_id BIGINT REFERENCES contacts(id) ON DELETE SET NULL,
+    empresa_id BIGINT REFERENCES contacts(id) ON DELETE SET NULL,
     oportunidad_id BIGINT REFERENCES oportunidades(id) ON DELETE SET NULL,
     venta_id BIGINT REFERENCES ventas(id) ON DELETE SET NULL,
     pedido_id BIGINT REFERENCES pedidos(id) ON DELETE SET NULL,
@@ -1060,6 +1061,7 @@ CREATE TABLE IF NOT EXISTS crm_actividades (
 CREATE INDEX IF NOT EXISTS idx_actividades_estado_fecha ON crm_actividades (estado, fecha_programada);
 CREATE INDEX IF NOT EXISTS idx_actividades_trabajador ON crm_actividades (trabajador_id, fecha_programada);
 CREATE INDEX IF NOT EXISTS idx_actividades_contacto ON crm_actividades (contacto_id);
+CREATE INDEX IF NOT EXISTS idx_actividades_empresa ON crm_actividades (empresa_id);
 CREATE INDEX IF NOT EXISTS idx_actividades_oportunidad ON crm_actividades (oportunidad_id);
 CREATE INDEX IF NOT EXISTS idx_actividades_venta ON crm_actividades (venta_id);
 CREATE INDEX IF NOT EXISTS idx_actividades_pedido ON crm_actividades (pedido_id);

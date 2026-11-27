@@ -96,7 +96,9 @@ import {
   Image as ImageIcon,
   Lock,
   Unlock,
+  CalendarClock,
 } from "lucide-react";
+import { ModalCrearActividad } from "@/components/actividades/ModalCrearActividad";
 
 export interface InstalledDocItem {
   id: string;
@@ -234,6 +236,10 @@ export default function SalesViewPage() {
       setSidebarOpen(false);
     }
   }, []);
+
+  // Actividades State
+  const [selectedVentaForActividad, setSelectedVentaForActividad] = useState<any | null>(null);
+  const [actividadModalOpen, setActividadModalOpen] = useState(false);
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState("");
@@ -2040,6 +2046,16 @@ export default function SalesViewPage() {
                                         <DropdownMenuSeparator />
                                       </>
                                     )}
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSelectedVentaForActividad(sale);
+                                        setActividadModalOpen(true);
+                                      }}
+                                      className="cursor-pointer text-xs text-blue-700 font-medium"
+                                    >
+                                      <CalendarClock className="size-3.5 mr-1.5 text-blue-600" />
+                                      Programar Actividad / Instalación
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => handleOpenView(sale)} className="cursor-pointer text-xs text-emerald-700 font-medium">
                                       <FileText className="size-3.5 mr-1.5" />
                                       Ver Comprobante
@@ -2849,6 +2865,16 @@ export default function SalesViewPage() {
                                 <DropdownMenuContent align="end" className="text-xs w-48">
                                   <DropdownMenuLabel>Acciones de Venta</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedVentaForActividad(sale);
+                                      setActividadModalOpen(true);
+                                    }}
+                                    className="gap-2 cursor-pointer text-blue-700 font-medium"
+                                  >
+                                    <CalendarClock className="size-3.5 text-blue-600" />
+                                    Programar Actividad
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleOpenView(sale)} className="gap-2 cursor-pointer">
                                     <Eye className="size-3.5 text-blue-600" />
                                     Ver Comprobante
@@ -4142,6 +4168,26 @@ export default function SalesViewPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal Programar Actividad vinculado a la Venta */}
+      {selectedVentaForActividad && (
+        <ModalCrearActividad
+          open={actividadModalOpen}
+          onOpenChange={setActividadModalOpen}
+          onSuccess={() => {
+            toast.success(`Actividad programada para la venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`);
+          }}
+          initialData={{
+            venta_id: selectedVentaForActividad.id,
+            venta_numero: selectedVentaForActividad.numero_venta || `#${selectedVentaForActividad.id}`,
+            contacto_id: selectedVentaForActividad.contacto_id || null,
+            contacto_nombre: selectedVentaForActividad.cliente_nombre_completo || selectedVentaForActividad.cliente_nombre,
+            empresa_id: selectedVentaForActividad.empresa_id || null,
+            asunto: `Instalación / Seguimiento: Venta #${selectedVentaForActividad.numero_venta || selectedVentaForActividad.id}`,
+            tipo: "Instalación",
+          }}
+        />
+      )}
     </div>
   );
 }
