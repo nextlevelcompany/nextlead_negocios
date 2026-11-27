@@ -51,10 +51,14 @@ interface CommercialData {
     id?: number
     label: string
     equipo?: string | null
+    canChangeFilter?: boolean
+    userScope?: string
   }
   filterOptions?: {
     supervisores: SupervisorOption[]
     ejecutivos: EjecutivoOption[]
+    userScope?: string
+    canChangeFilter?: boolean
   }
   kpis: {
     totalOportunidades: number
@@ -106,12 +110,12 @@ export default function AnalyticsDashboard() {
   const [error, setError] = useState<string | null>(null)
 
   // Filter state
-  const [filterType, setFilterType] = useState<"all" | "supervisor" | "ejecutivo" | "unassigned">("all")
+  const [filterType, setFilterType] = useState<"me" | "all" | "supervisor" | "ejecutivo" | "unassigned">("me")
   const [selectedSupervisorId, setSelectedSupervisorId] = useState<string>("")
   const [selectedEjecutivoId, setSelectedEjecutivoId] = useState<string>("")
 
   const loadData = async (
-    type: "all" | "supervisor" | "ejecutivo" | "unassigned" = filterType,
+    type: "me" | "all" | "supervisor" | "ejecutivo" | "unassigned" = filterType,
     supId: string = selectedSupervisorId,
     ejeId: string = selectedEjecutivoId
   ) => {
@@ -122,7 +126,11 @@ export default function AnalyticsDashboard() {
       let url = "/api/dashboard/commercial"
       const params: string[] = []
 
-      if (type === "supervisor" && supId) {
+      if (type === "me") {
+        params.push("scopeType=me")
+      } else if (type === "all") {
+        params.push("scopeType=all")
+      } else if (type === "supervisor" && supId) {
         params.push(`supervisorId=${supId}`)
       } else if (type === "ejecutivo" && ejeId) {
         params.push(`ejecutivoId=${ejeId}`)
@@ -136,6 +144,10 @@ export default function AnalyticsDashboard() {
 
       const res = await api.get(url)
       setData(res.data)
+
+      if (res.data?.activeFilter?.type) {
+        setFilterType(res.data.activeFilter.type as any)
+      }
 
       // Auto-select first supervisor/executive if none selected yet
       if (type === "supervisor" && !supId && res.data?.filterOptions?.supervisores?.length > 0) {
@@ -152,12 +164,12 @@ export default function AnalyticsDashboard() {
   }
 
   useEffect(() => {
-    loadData("all", "", "")
+    loadData("me", "", "")
   }, [])
 
-  const handleFilterTypeChange = (newType: "all" | "supervisor" | "ejecutivo" | "unassigned") => {
+  const handleFilterTypeChange = (newType: "me" | "all" | "supervisor" | "ejecutivo" | "unassigned") => {
     setFilterType(newType)
-    if (newType === "all" || newType === "unassigned") {
+    if (newType === "me" || newType === "all" || newType === "unassigned") {
       setSelectedSupervisorId("")
       setSelectedEjecutivoId("")
       loadData(newType, "", "")
@@ -185,10 +197,10 @@ export default function AnalyticsDashboard() {
   }
 
   const handleResetFilter = () => {
-    setFilterType("all")
+    setFilterType("me")
     setSelectedSupervisorId("")
     setSelectedEjecutivoId("")
-    loadData("all", "", "")
+    loadData("me", "", "")
   }
 
   const formatMoney = (val: number | undefined | null) => {
@@ -266,7 +278,7 @@ export default function AnalyticsDashboard() {
       </div>
 
       {/* ========================================================================= */}
-      {/* BARRA DE FILTROS: POR SUPERVISOR Y SU GRUPO O POR EJECUTIVO INDIVIDUAL */}
+      {/* BARRA DE FILTROS: VISTA PERSONAL POR USUARIO, SUPERVISOR O EMPRESA */}
       {/* ========================================================================= */}
       <Card className="border bg-card/90 shadow-xs">
         <CardContent className="p-4">
@@ -274,59 +286,82 @@ export default function AnalyticsDashboard() {
             {/* Izquierda: Selector de Tipo de Filtro */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mr-1">
-                <Filter className="w-3.5 h-3.5 text-primary" /> Filtrar por:
+                <Filter className="w-3.5 h-3.5 text-primary" /> Vista:
               </span>
 
+              {/* 1. Mis Datos (Por defecto para cada usuario) */}
               <button
                 type="button"
-                onClick={() => handleFilterTypeChange("all")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  filterType === "all"
+                onClick={() => handleFilterTypeChange("me")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  filterType === "me"
                     ? "bg-primary text-primary-foreground shadow-xs"
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
                 }`}
               >
-                Toda la Empresa
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleFilterTypeChange("supervisor")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  filterType === "supervisor"
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                Supervisor y su Grupo
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleFilterTypeChange("ejecutivo")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  filterType === "ejecutivo"
-                    ? "bg-blue-600 text-white shadow-xs"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
                 <UserCheck className="w-3.5 h-3.5" />
-                Por Ejecutivo / Asesor
+                Mis Datos
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleFilterTypeChange("unassigned")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  filterType === "unassigned"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                Sin Asignar / WhatsApp
-              </button>
+              {/* Si el usuario tiene permisos para ver o filtrar otros asesores */}
+              {data?.activeFilter?.canChangeFilter !== false && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleFilterTypeChange("ejecutivo")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      filterType === "ejecutivo"
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    Por Cada Usuario / Asesor
+                  </button>
+
+                  {data?.activeFilter?.userScope === "all" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleFilterTypeChange("supervisor")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          filterType === "supervisor"
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        }`}
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        Supervisor y su Grupo
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleFilterTypeChange("all")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          filterType === "all"
+                            ? "bg-purple-600 text-white shadow-xs"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        }`}
+                      >
+                        Toda la Empresa (Global)
+                      </button>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleFilterTypeChange("unassigned")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      filterType === "unassigned"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Sin Asignar / WhatsApp
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Derecha: Desplegable contextual según el tipo seleccionado */}
@@ -350,7 +385,7 @@ export default function AnalyticsDashboard() {
 
               {filterType === "ejecutivo" && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium">Ejecutivo:</span>
+                  <span className="text-xs text-muted-foreground font-medium">Usuario / Asesor:</span>
                   <select
                     value={selectedEjecutivoId}
                     onChange={(e) => handleEjecutivoChange(e.target.value)}
@@ -365,8 +400,8 @@ export default function AnalyticsDashboard() {
                 </div>
               )}
 
-              {/* Botón Reset si hay filtro activo */}
-              {filterType !== "all" && (
+              {/* Botón Reset si no está en Mis Datos */}
+              {filterType !== "me" && data?.activeFilter?.canChangeFilter !== false && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -374,24 +409,28 @@ export default function AnalyticsDashboard() {
                   className="h-8.5 px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer gap-1"
                 >
                   <X className="w-3.5 h-3.5" />
-                  Limpiar
+                  Mis Datos
                 </Button>
               )}
             </div>
           </div>
 
           {/* Badge informativo del filtro activo */}
-          {data?.activeFilter && data.activeFilter.type !== "all" && (
+          {data?.activeFilter && (
             <div className="mt-3 pt-3 border-t flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Vista activa:</span>
+                <span className="text-muted-foreground">Datos mostrados:</span>
                 <Badge
                   variant="outline"
                   className={`text-xs font-bold gap-1.5 ${
-                    data.activeFilter.type === "supervisor"
+                    data.activeFilter.type === "me"
+                      ? "border-primary text-primary bg-primary/10"
+                      : data.activeFilter.type === "supervisor"
                       ? "border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40"
                       : data.activeFilter.type === "ejecutivo"
                       ? "border-blue-500 text-blue-700 bg-blue-50 dark:bg-blue-950/40"
+                      : data.activeFilter.type === "all"
+                      ? "border-purple-500 text-purple-700 bg-purple-50 dark:bg-purple-950/40"
                       : "border-amber-500 text-amber-700 bg-amber-50 dark:bg-amber-950/40"
                   }`}
                 >
@@ -406,7 +445,7 @@ export default function AnalyticsDashboard() {
                 )}
               </div>
               <span className="text-[11px] text-muted-foreground italic">
-                Mostrando {data.kpis.totalOportunidades} {data.kpis.totalOportunidades === 1 ? "oportunidad" : "oportunidades"} para este criterio
+                {data.kpis.totalOportunidades} {data.kpis.totalOportunidades === 1 ? "oportunidad registrada" : "oportunidades registradas"}
               </span>
             </div>
           )}
